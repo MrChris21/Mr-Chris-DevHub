@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/devhub-mobile/"
+title = "DevHub Mobile"
+description = "Native mobile companion for DevHub. Lets developers access their notes, tasks, reminders, and bookmarks on the go. Connects to the same API server and PostgreSQL database as the web app. Dark terminal aesthetic matching the web app's navy palette with blue accents."
+version = "1.0.0"
+id = "artifacts/devhub-mobile"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/devhub-mobile/" ]
+localPort = 20634
+
+[services.development]
+run = "pnpm --filter @workspace/devhub-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/devhub-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/devhub-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "20634"
+BASE_PATH = "/devhub-mobile/"
