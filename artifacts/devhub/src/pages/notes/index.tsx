@@ -121,10 +121,10 @@ export default function NotesList() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6 h-full flex flex-col">
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight font-mono text-primary">Notes</h1>
-          <p className="text-muted-foreground mt-1">Capture your thoughts and code.</p>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight font-mono text-primary">Notes</h1>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">Capture your thoughts and code.</p>
         </div>
-        <Button onClick={handleCreate} className="gap-2" disabled={createNote.isPending}>
+        <Button onClick={handleCreate} className="gap-2 w-full sm:w-auto shrink-0" disabled={createNote.isPending}>
           <Plus className="w-4 h-4" />
           {createNote.isPending ? "Creating..." : "New Note"}
         </Button>
@@ -134,7 +134,7 @@ export default function NotesList() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input 
           placeholder="Search notes..." 
-          className="pl-9 max-w-md bg-card/50 border-border/50 focus-visible:ring-primary/50"
+          className="pl-9 w-full max-w-md bg-card/50 border-border/50 focus-visible:ring-primary/50"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />

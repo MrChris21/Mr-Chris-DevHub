@@ -62,25 +62,25 @@ export default function Dashboard() {
       className="space-y-8 pb-8"
     >
       <div>
-        <h1 className="text-3xl font-bold tracking-tight font-mono text-primary">Overview</h1>
-        <p className="text-muted-foreground mt-2">Welcome back to your command center.</p>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight font-mono text-primary">Overview</h1>
+        <p className="text-muted-foreground mt-2 text-sm sm:text-base">Welcome back to your command center.</p>
       </div>
 
-      <div className="grid gap-4 grid-cols-2 md:grid-cols-4 lg:grid-cols-7">
+      <div className="grid gap-3 sm:gap-4 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7">
         {stats.map((stat) => (
-          <Link key={stat.label} href={stat.href}>
-            <Card className="hover-elevate cursor-pointer border-border/50 hover:border-primary/50 transition-colors bg-card/50 backdrop-blur">
-              <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-2">
-                <stat.icon className={`w-6 h-6 ${stat.color} mb-1`} />
-                <div className="text-2xl font-bold font-mono">{stat.value}</div>
-                <div className="text-xs text-muted-foreground uppercase tracking-wider">{stat.label}</div>
+          <Link key={stat.label} href={stat.href} className="min-w-0">
+            <Card className="h-full hover-elevate cursor-pointer border-border/50 hover:border-primary/50 transition-colors bg-card/50 backdrop-blur">
+              <CardContent className="p-3 sm:p-4 flex flex-col items-center justify-center text-center gap-1.5 sm:gap-2">
+                <stat.icon className={`w-5 h-5 sm:w-6 sm:h-6 ${stat.color} mb-0.5`} />
+                <div className="text-xl sm:text-2xl font-bold font-mono">{stat.value}</div>
+                <div className="text-[10px] sm:text-xs text-muted-foreground uppercase tracking-wider truncate w-full">{stat.label}</div>
               </CardContent>
             </Card>
           </Link>
         ))}
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
         <Card className="col-span-1 border-border/50 bg-card/50">
           <CardHeader className="pb-3 border-b border-border/50">
             <CardTitle className="text-sm font-mono uppercase tracking-wider flex items-center gap-2">

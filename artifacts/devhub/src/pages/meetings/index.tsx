@@ -78,7 +78,7 @@ export default function Meetings() {
         
         <div className="flex items-center gap-2 mt-2 sm:mt-0 sm:self-center">
           {m.meetLink && (
-            <Button asChild variant={isPast ? "outline" : "default"} className="gap-2">
+            <Button asChild variant={isPast ? "outline" : "default"} className="gap-2 w-full sm:w-auto">
               <a href={m.meetLink} target="_blank" rel="noreferrer">
                 <Video className="w-4 h-4" />
                 {isPast ? "Link" : "Join"}
@@ -97,7 +97,7 @@ export default function Meetings() {
     <div className="max-w-4xl mx-auto space-y-8 pb-8">
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight font-mono text-primary">Meetings</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight font-mono text-primary">Meetings</h1>
           <p className="text-muted-foreground mt-1">Your schedule and links in one place.</p>
         </div>
         

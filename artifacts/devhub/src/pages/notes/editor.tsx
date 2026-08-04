@@ -104,20 +104,22 @@ export default function NoteEditor() {
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full flex flex-col max-w-5xl mx-auto gap-4">
-      <div className="flex items-center gap-2 mb-2">
-        <Link href="/notes">
-          <Button variant="ghost" size="icon" className="shrink-0 -ml-2 text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="w-4 h-4" />
-          </Button>
-        </Link>
-        <Input 
-          value={title} 
-          onChange={(e) => setTitle(e.target.value)} 
-          className="text-2xl font-bold bg-transparent border-transparent px-2 h-12 focus-visible:ring-0 focus-visible:bg-muted/20"
-          placeholder="Note title..."
-        />
-        <div className="flex items-center gap-2 shrink-0 ml-auto">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="h-full min-h-0 flex flex-col max-w-5xl mx-auto gap-3 sm:gap-4 w-full min-w-0">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-1 sm:mb-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <Link href="/notes">
+            <Button variant="ghost" size="icon" className="shrink-0 -ml-2 text-muted-foreground hover:text-foreground">
+              <ArrowLeft className="w-4 h-4" />
+            </Button>
+          </Link>
+          <Input 
+            value={title} 
+            onChange={(e) => setTitle(e.target.value)} 
+            className="text-xl sm:text-2xl font-bold bg-transparent border-transparent px-2 h-11 sm:h-12 focus-visible:ring-0 focus-visible:bg-muted/20 min-w-0"
+            placeholder="Note title..."
+          />
+        </div>
+        <div className="flex items-center gap-2 shrink-0 sm:ml-auto pl-8 sm:pl-0">
           <Button 
             variant="ghost" 
             size="icon" 
@@ -172,15 +174,15 @@ export default function NoteEditor() {
             <TabsTrigger value="preview" className="text-xs">Preview</TabsTrigger>
           </TabsList>
         </div>
-        <TabsContent value="write" className="flex-1 m-0">
+        <TabsContent value="write" className="flex-1 m-0 min-h-[50vh] sm:min-h-0">
           <Textarea 
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            className="w-full h-full resize-none font-mono text-sm leading-relaxed p-6 bg-card/30 border-border/50 focus-visible:ring-1 focus-visible:ring-primary/30"
+            className="w-full h-full min-h-[50vh] sm:min-h-full resize-none font-mono text-sm leading-relaxed p-4 sm:p-6 bg-card/30 border-border/50 focus-visible:ring-1 focus-visible:ring-primary/30"
             placeholder="Write using markdown..."
           />
         </TabsContent>
-        <TabsContent value="preview" className="flex-1 m-0 overflow-auto bg-card/30 border border-border/50 rounded-md p-6">
+        <TabsContent value="preview" className="flex-1 m-0 min-h-[50vh] overflow-auto bg-card/30 border border-border/50 rounded-md p-4 sm:p-6">
           <div className="prose prose-sm dark:prose-invert max-w-none">
             {/* Extremely naive markdown rendering for preview - in a real app we'd use react-markdown */}
             {content ? content.split('\n').map((line, i) => {

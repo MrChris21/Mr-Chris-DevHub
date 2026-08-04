@@ -93,7 +93,7 @@ export default function Reminders() {
     return (
       <motion.div layout initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
         <Card className={`border-border/50 transition-colors ${r.done ? 'bg-card/20' : 'bg-card/50 hover:bg-card/80'} ${overdue ? 'border-amber-500/50' : ''}`}>
-          <CardContent className="p-4 flex items-center gap-4">
+          <CardContent className="p-3 sm:p-4 flex items-start sm:items-center gap-3 sm:gap-4">
             <Checkbox 
               checked={r.done} 
               onCheckedChange={() => toggleDone(r.id, r.done)}
@@ -125,8 +125,8 @@ export default function Reminders() {
   return (
     <div className="max-w-3xl mx-auto space-y-8 h-full flex flex-col">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight font-mono text-primary">Reminders</h1>
-        <p className="text-muted-foreground mt-1">Don't forget the important things.</p>
+        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight font-mono text-primary">Reminders</h1>
+        <p className="text-muted-foreground mt-1 text-sm sm:text-base">Don&apos;t forget the important things.</p>
       </div>
 
       <Card className="bg-card/50 border-border/50">

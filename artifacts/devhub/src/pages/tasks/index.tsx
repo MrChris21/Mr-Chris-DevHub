@@ -105,16 +105,16 @@ export default function TasksBoard() {
   );
 
   return (
-    <div className="h-full flex flex-col space-y-6">
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight font-mono text-primary">Tasks</h1>
-          <p className="text-muted-foreground mt-1">Manage your pending work.</p>
+    <div className="h-full flex flex-col space-y-4 sm:space-y-6 min-w-0">
+      <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 items-stretch sm:items-center justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight font-mono text-primary">Tasks</h1>
+          <p className="text-muted-foreground mt-1 text-sm sm:text-base">Manage your pending work.</p>
         </div>
         
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 w-full sm:w-auto">
           <Select value={filterPriority} onValueChange={setFilterPriority}>
-            <SelectTrigger className="w-[140px] bg-card/50 border-border/50">
+            <SelectTrigger className="w-full sm:w-[140px] bg-card/50 border-border/50">
               <SelectValue placeholder="Priority" />
             </SelectTrigger>
             <SelectContent>
@@ -127,21 +127,21 @@ export default function TasksBoard() {
         </div>
       </div>
 
-      <form onSubmit={handleCreate} className="flex items-center gap-2 max-w-xl">
+      <form onSubmit={handleCreate} className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full max-w-xl">
         <Input 
           placeholder="Add a new task..." 
           value={newTaskTitle}
           onChange={(e) => setNewTaskTitle(e.target.value)}
-          className="bg-card/50 border-border/50 focus-visible:ring-primary/50"
+          className="bg-card/50 border-border/50 focus-visible:ring-primary/50 min-w-0 flex-1"
         />
-        <Button type="submit" disabled={createTask.isPending || !newTaskTitle.trim()}>
+        <Button type="submit" disabled={createTask.isPending || !newTaskTitle.trim()} className="shrink-0">
           <Plus className="w-4 h-4 mr-2" />
           Add Task
         </Button>
       </form>
 
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 flex-1">
           {columns.map(c => (
             <div key={c.id} className="space-y-4">
               <Skeleton className="h-10 w-full" />
@@ -151,12 +151,12 @@ export default function TasksBoard() {
           ))}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0 overflow-auto pb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 flex-1 min-h-0 overflow-auto pb-4 safe-area-bottom">
           {columns.map(col => {
             const colTasks = filteredTasks.filter(t => t.status === col.id);
             return (
-              <div key={col.id} className="flex flex-col h-full bg-muted/10 rounded-xl p-4 border border-border/30">
-                <div className="flex items-center justify-between mb-4 px-1">
+              <div key={col.id} className="flex flex-col min-h-[12rem] lg:min-h-0 lg:h-full bg-muted/10 rounded-xl p-3 sm:p-4 border border-border/30">
+                <div className="flex items-center justify-between mb-3 sm:mb-4 px-1">
                   <h3 className="font-semibold text-sm flex items-center gap-2">
                     {col.icon}
                     {col.label}
@@ -165,7 +165,7 @@ export default function TasksBoard() {
                     {colTasks.length}
                   </Badge>
                 </div>
-                <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar -mx-2 px-2">
+                <div className="flex-1 overflow-y-auto space-y-3 no-scrollbar -mx-1 px-1 sm:-mx-2 sm:px-2">
                   <AnimatePresence>
                     {colTasks.map(task => (
                       <TaskCard key={task.id} task={task} />

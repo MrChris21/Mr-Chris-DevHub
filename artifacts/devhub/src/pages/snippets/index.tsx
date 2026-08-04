@@ -67,7 +67,7 @@ export default function Snippets() {
     <div className="space-y-6 h-full flex flex-col">
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight font-mono text-primary flex items-center gap-3">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight font-mono text-primary flex items-center gap-3">
             <Code2 className="w-8 h-8 text-primary" />
             Snippets
           </h1>
@@ -76,7 +76,7 @@ export default function Snippets() {
         
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button className="gap-2 w-full sm:w-auto">
               <Plus className="w-4 h-4" />
               New Snippet
             </Button>
@@ -86,7 +86,7 @@ export default function Snippets() {
               <DialogTitle>Save Code Snippet</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleCreate} className="flex-1 overflow-auto space-y-4 py-4 pr-1">
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="col-span-2 space-y-2">
                   <Label>Title</Label>
                   <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. React Query Setup" autoFocus required />

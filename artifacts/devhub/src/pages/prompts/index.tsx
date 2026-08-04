@@ -65,7 +65,7 @@ export default function Prompts() {
     <div className="space-y-6 h-full flex flex-col">
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight font-mono text-primary flex items-center gap-3">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight font-mono text-primary flex items-center gap-3">
             <Sparkles className="w-8 h-8 text-primary" />
             AI Prompts
           </h1>
@@ -74,7 +74,7 @@ export default function Prompts() {
         
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <Button className="gap-2">
+            <Button className="gap-2 w-full sm:w-auto">
               <Plus className="w-4 h-4" />
               New Prompt
             </Button>
