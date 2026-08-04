@@ -13,6 +13,7 @@ import { Feather } from '@expo/vector-icons';
 import { useListReminders } from '@workspace/api-client-react';
 import type { Reminder } from '@workspace/api-client-react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { syncReminderNotifications } from '@/lib/notifications';
 
 function formatDue(dateStr: string): { label: string; overdue: boolean; today: boolean } {
   const date = new Date(dateStr);
@@ -137,6 +138,13 @@ export default function RemindersScreen() {
   const { data: reminders, isLoading, refetch, isRefetching } = useListReminders();
 
   const topPadding = Platform.OS === 'web' ? 67 : insets.top;
+
+  // Sync local notifications whenever the reminder list refreshes.
+  React.useEffect(() => {
+    if (reminders) {
+      syncReminderNotifications(reminders).catch(console.warn);
+    }
+  }, [reminders]);
 
   // Sort: pending first (by dueAt asc), then done
   const sorted = React.useMemo(() => {

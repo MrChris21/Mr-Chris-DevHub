@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Platform } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -11,33 +12,84 @@ import {
   Inter_700Bold,
   useFonts,
 } from '@expo-google-fonts/inter';
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
+import * as Notifications from 'expo-notifications';
 import { setBaseUrl } from '@workspace/api-client-react';
+import {
+  configureNotificationHandler,
+  requestNotificationPermission,
+  setupAndroidChannel,
+} from '@/lib/notifications';
+
+// ─── Module-level setup ───────────────────────────────────────────────────────
 
 // Point the shared API client at the deployed/dev domain.
-// EXPO_PUBLIC_DOMAIN is injected at bundle time via the dev/start script.
 if (process.env.EXPO_PUBLIC_DOMAIN) {
   setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
 }
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
+// Configure how notifications look when the app is foregrounded.
+configureNotificationHandler();
+
+// Prevent the splash screen from auto-hiding before assets are loaded.
 SplashScreen.preventAutoHideAsync();
+
+// ─── React Query client ───────────────────────────────────────────────────────
 
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 30_000,        // 30 s — don't hammer the API
+      staleTime: 30_000,
       retry: 1,
     },
   },
 });
 
+// ─── Notification deep-link handler ──────────────────────────────────────────
+
+/**
+ * Listens for notification tap events and navigates to the Reminders tab.
+ * Must be rendered inside the Expo Router context (inside <Stack>).
+ */
+function NotificationHandler() {
+  const router = useRouter();
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    // Handle a notification tap that launches (or re-opens) the app.
+    const handleLastResponse = async () => {
+      const response = await Notifications.getLastNotificationResponseAsync();
+      if (response?.notification.request.content.data?.screen === 'reminders') {
+        router.navigate('/(tabs)/reminders');
+      }
+    };
+    handleLastResponse();
+
+    // Handle a notification tap while the app is already running.
+    const sub = Notifications.addNotificationResponseReceivedListener(response => {
+      if (response.notification.request.content.data?.screen === 'reminders') {
+        router.navigate('/(tabs)/reminders');
+      }
+    });
+
+    return () => sub.remove();
+  }, [router]);
+
+  return null;
+}
+
+// ─── Root layout ─────────────────────────────────────────────────────────────
+
 function RootLayoutNav() {
   return (
-    <Stack screenOptions={{ headerBackTitle: 'Back' }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-    </Stack>
+    <>
+      <NotificationHandler />
+      <Stack screenOptions={{ headerBackTitle: 'Back' }}>
+        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      </Stack>
+    </>
   );
 }
 
@@ -48,6 +100,12 @@ export default function RootLayout() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+
+  // Request notification permission on first launch (non-blocking).
+  useEffect(() => {
+    requestNotificationPermission();
+    setupAndroidChannel();
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
