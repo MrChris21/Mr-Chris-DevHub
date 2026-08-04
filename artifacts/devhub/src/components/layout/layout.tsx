@@ -45,7 +45,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <Sidebar className="border-r border-border">
           <SidebarHeader className="border-b border-border py-4 px-4 flex items-center gap-2 font-mono font-bold tracking-tight text-primary">
             <TerminalSquare className="w-5 h-5" />
-            <span>DevHub</span>
+            <span>Mr. Chris DevHub</span>
           </SidebarHeader>
           <SidebarContent>
             <SidebarGroup>

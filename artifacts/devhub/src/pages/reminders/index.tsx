@@ -34,11 +34,11 @@ export default function Reminders() {
           if (!fired.includes(r.id)) {
             // Trigger
             if (Notification.permission === "granted") {
-              new Notification("DevHub Reminder", { body: r.title, icon: "/vite.svg" });
+              new Notification("Mr. Chris DevHub", { body: r.title, icon: "/vite.svg" });
             } else if (Notification.permission !== "denied") {
               Notification.requestPermission().then(permission => {
                 if (permission === "granted") {
-                  new Notification("DevHub Reminder", { body: r.title, icon: "/vite.svg" });
+                  new Notification("Mr. Chris DevHub", { body: r.title, icon: "/vite.svg" });
                 }
               });
             }

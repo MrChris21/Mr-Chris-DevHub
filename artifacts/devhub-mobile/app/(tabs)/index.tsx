@@ -188,7 +188,7 @@ export default function DashboardScreen() {
     >
       {/* Header */}
       <View style={styles.heroSection}>
-        <Text style={[styles.heroTitle, { color: colors.primary }]}>DevHub</Text>
+        <Text style={[styles.heroTitle, { color: colors.primary }]}>Mr. Chris DevHub</Text>
         <Text style={[styles.heroDate, { color: colors.mutedForeground }]}>{todayLabel}</Text>
       </View>
 
