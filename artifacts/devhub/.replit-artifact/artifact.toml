@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "DevHub"
+description = "A personal productivity workspace for a Full-stack developer & AI Analyst. Centralizes notes with markdown/code support, reminders with browser alarms, meetings, tasks, AI prompts, code snippets, and bookmarks into one fast, persistent app."
+version = "1.0.0"
+id = "artifacts/devhub"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25123
+
+[services.development]
+run = "pnpm --filter @workspace/devhub run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/devhub", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/devhub/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25123"
+BASE_PATH = "/"

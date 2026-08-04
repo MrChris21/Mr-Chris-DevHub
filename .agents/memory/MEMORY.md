@@ -1,0 +1,2 @@
+- [Drizzle Date Serialization](drizzle-date-serialization.md) — Drizzle returns JS Date objects; Zod response schemas expect ISO strings. Always call serializeDates() before .parse().
+- [Orval Zod v4 Codegen Fix](orval-zod-v4-fix.md) — Orval 8.23 generates zod/v4 API but workspace pins zod@^3; fix via sed post-process in codegen script.
