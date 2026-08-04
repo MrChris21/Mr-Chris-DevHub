@@ -41,6 +41,7 @@ import {
   Pencil,
   CalendarDays,
   Tag,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -100,8 +101,10 @@ export default function TasksBoard() {
   const deleteTask = useDeleteTask();
 
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskDescription, setNewTaskDescription] = useState("");
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [viewingTask, setViewingTask] = useState<Task | null>(null);
   const [form, setForm] = useState<EditForm | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -122,13 +125,22 @@ export default function TasksBoard() {
     if (!newTaskTitle.trim()) return;
 
     createTask.mutate(
-      { data: { title: newTaskTitle.trim(), status: "todo", priority: "medium" } },
+      {
+        data: {
+          title: newTaskTitle.trim(),
+          description: newTaskDescription.trim() || undefined,
+          status: "todo",
+          priority: "medium",
+        },
+      },
       {
         onSuccess: (created) => {
           setNewTaskTitle("");
+          setNewTaskDescription("");
           invalidate();
           toast.success("Task created");
-          setEditingTask(created);
+          // Open full details so the user can read everything they just added
+          setViewingTask(created);
         },
         onError: () => toast.error("Failed to create task"),
       },
@@ -163,6 +175,7 @@ export default function TasksBoard() {
       {
         onSuccess: () => {
           if (editingTask?.id === id) setEditingTask(null);
+          if (viewingTask?.id === id) setViewingTask(null);
           invalidate();
           toast.success("Task deleted");
         },
@@ -207,6 +220,8 @@ export default function TasksBoard() {
           queryClient.setQueryData(getListTasksQueryKey(), (old: Task[] | undefined) =>
             old?.map((t) => (t.id === updated.id ? updated : t)),
           );
+          // Show full saved data after edit
+          setViewingTask(updated);
         },
         onError: () => {
           setSaving(false);
@@ -250,25 +265,39 @@ export default function TasksBoard() {
       >
         <Card
           className="border-border/50 bg-card/60 backdrop-blur group cursor-pointer hover:border-primary/40 transition-colors"
-          onClick={() => setEditingTask(task)}
+          onClick={() => setViewingTask(task)}
         >
           <CardContent className="p-4 flex flex-col gap-3">
             <div className="flex items-start gap-2">
-              <div className="flex-1 min-w-0 space-y-1">
+              <div className="flex-1 min-w-0 space-y-2">
                 <p
-                  className={`text-sm font-medium leading-tight break-words ${
+                  className={`text-sm font-semibold leading-snug break-words whitespace-pre-wrap ${
                     task.status === "done" ? "line-through text-muted-foreground" : ""
                   }`}
                 >
                   {task.title}
                 </p>
                 {task.description ? (
-                  <p className="text-xs text-muted-foreground line-clamp-2 break-words">
+                  <p className="text-xs sm:text-sm text-muted-foreground break-words whitespace-pre-wrap leading-relaxed">
                     {task.description}
                   </p>
-                ) : null}
+                ) : (
+                  <p className="text-xs text-muted-foreground/60 italic">No description</p>
+                )}
               </div>
               <div className="flex items-center gap-0.5 shrink-0 -mt-1 -mr-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setViewingTask(task);
+                  }}
+                  title="View full details"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
@@ -305,7 +334,7 @@ export default function TasksBoard() {
                     {dueLabel}
                   </span>
                 )}
-                {task.tags?.slice(0, 3).map((tag) => (
+                {task.tags?.map((tag) => (
                   <Badge
                     key={tag}
                     variant="secondary"
@@ -314,11 +343,6 @@ export default function TasksBoard() {
                     {tag}
                   </Badge>
                 ))}
-                {(task.tags?.length ?? 0) > 3 && (
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-5 bg-secondary/50">
-                    +{(task.tags?.length ?? 0) - 3}
-                  </Badge>
-                )}
               </div>
             )}
 
@@ -370,7 +394,7 @@ export default function TasksBoard() {
             Tasks
           </h1>
           <p className="text-muted-foreground mt-1 text-sm sm:text-base">
-            Click any task to edit all of its details.
+            Add a title and description, then open any task to read the full details.
           </p>
         </div>
 
@@ -391,22 +415,39 @@ export default function TasksBoard() {
 
       <form
         onSubmit={handleCreate}
-        className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full max-w-xl"
+        className="w-full max-w-2xl rounded-xl border border-border/50 bg-card/40 p-4 sm:p-5 space-y-3"
       >
-        <Input
-          placeholder="Add a new task..."
-          value={newTaskTitle}
-          onChange={(e) => setNewTaskTitle(e.target.value)}
-          className="bg-card/50 border-border/50 focus-visible:ring-primary/50 min-w-0 flex-1"
-        />
-        <Button
-          type="submit"
-          disabled={createTask.isPending || !newTaskTitle.trim()}
-          className="shrink-0"
-        >
-          <Plus className="w-4 h-4 mr-2" />
-          Add Task
-        </Button>
+        <div className="space-y-2">
+          <Label htmlFor="new-task-title">Title</Label>
+          <Input
+            id="new-task-title"
+            placeholder="What needs to be done?"
+            value={newTaskTitle}
+            onChange={(e) => setNewTaskTitle(e.target.value)}
+            className="bg-background/50 border-border/50 focus-visible:ring-primary/50"
+            required
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="new-task-description">Description</Label>
+          <Textarea
+            id="new-task-description"
+            placeholder="Add details, notes, steps, or context..."
+            value={newTaskDescription}
+            onChange={(e) => setNewTaskDescription(e.target.value)}
+            className="min-h-[96px] resize-y bg-background/50 border-border/50 focus-visible:ring-primary/50"
+          />
+        </div>
+        <div className="flex justify-end">
+          <Button
+            type="submit"
+            disabled={createTask.isPending || !newTaskTitle.trim()}
+            className="w-full sm:w-auto"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            {createTask.isPending ? "Adding..." : "Add Task"}
+          </Button>
+        </div>
       </form>
 
       {isLoading ? (
@@ -455,6 +496,121 @@ export default function TasksBoard() {
         </div>
       )}
 
+      {/* Full read-only details */}
+      <Dialog
+        open={!!viewingTask}
+        onOpenChange={(open) => {
+          if (!open) setViewingTask(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-[560px] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-mono">Task details</DialogTitle>
+          </DialogHeader>
+          {viewingTask && (
+            <div className="space-y-5 py-1">
+              <div className="space-y-1.5">
+                <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                  Title
+                </p>
+                <p className="text-base sm:text-lg font-semibold break-words whitespace-pre-wrap leading-snug">
+                  {viewingTask.title}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                  Description
+                </p>
+                <div className="rounded-lg border border-border/50 bg-muted/20 p-3 sm:p-4">
+                  {viewingTask.description ? (
+                    <p className="text-sm break-words whitespace-pre-wrap leading-relaxed">
+                      {viewingTask.description}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground italic">No description added.</p>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                    Status
+                  </p>
+                  <Badge variant="secondary" className="font-mono capitalize">
+                    {viewingTask.status.replace("_", " ")}
+                  </Badge>
+                </div>
+                <div className="space-y-1.5">
+                  <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
+                    Priority
+                  </p>
+                  <Badge
+                    variant="outline"
+                    className={`font-mono capitalize ${getPriorityColor(viewingTask.priority)}`}
+                  >
+                    {viewingTask.priority}
+                  </Badge>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <CalendarDays className="w-3.5 h-3.5" />
+                  Due date
+                </p>
+                <p className="text-sm">
+                  {formatDue(viewingTask.dueAt) ?? (
+                    <span className="text-muted-foreground italic">No due date</span>
+                  )}
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5" />
+                  Tags
+                </p>
+                {viewingTask.tags && viewingTask.tags.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {viewingTask.tags.map((tag) => (
+                      <Badge key={tag} variant="secondary" className="bg-secondary/50">
+                        {tag}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground italic">No tags</p>
+                )}
+              </div>
+
+              <DialogFooter className="gap-2 flex-col-reverse sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setViewingTask(null)}
+                >
+                  Close
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const task = viewingTask;
+                    setViewingTask(null);
+                    setEditingTask(task);
+                  }}
+                >
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Edit
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit dialog */}
       <Dialog
         open={!!editingTask}
         onOpenChange={(open) => {
