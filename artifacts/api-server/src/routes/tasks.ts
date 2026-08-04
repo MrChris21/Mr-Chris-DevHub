@@ -60,7 +60,15 @@ router.patch("/tasks/:id", async (req, res): Promise<void> => {
     return;
   }
   const updateData: Record<string, unknown> = { ...parsed.data, updatedAt: new Date() };
-  if (parsed.data.dueAt) updateData.dueAt = new Date(parsed.data.dueAt);
+  // Allow clearing due date with null/empty string; coerce ISO strings to Date.
+  if (Object.prototype.hasOwnProperty.call(parsed.data, "dueAt")) {
+    const raw = parsed.data.dueAt as string | null | undefined;
+    updateData.dueAt = raw ? new Date(raw) : null;
+  }
+  // Allow clearing description with empty string.
+  if (Object.prototype.hasOwnProperty.call(parsed.data, "description")) {
+    updateData.description = parsed.data.description?.trim() ? parsed.data.description : null;
+  }
   const [row] = await db.update(tasksTable).set(updateData).where(eq(tasksTable.id, params.data.id)).returning();
   if (!row) {
     res.status(404).json({ error: "Task not found" });
