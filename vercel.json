@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "pnpm install",
+  "buildCommand": "pnpm --filter @workspace/api-server build && pnpm --filter @workspace/devhub build",
+  "outputDirectory": "artifacts/devhub/dist/public",
+  "framework": null,
+  "functions": {
+    "api/index.mjs": {
+      "includeFiles": "artifacts/api-server/dist/**",
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/((?!api/).*)", "destination": "/index.html" }
+  ]
+}
