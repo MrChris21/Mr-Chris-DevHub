@@ -48,3 +48,6 @@ Thumbs.db
 .cache/
 .local/
 .vercel
+.env.neon.local
+.env.vercel.production
+.env*.local
