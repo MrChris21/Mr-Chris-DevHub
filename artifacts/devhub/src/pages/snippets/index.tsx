@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Code2, Plus, Copy, Trash2, Check, Search } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { ShareButton } from "@/components/share-button";
+import { formatSnippetShare } from "@/lib/share";
 
 export default function Snippets() {
   const queryClient = useQueryClient();
@@ -159,11 +161,17 @@ export default function Snippets() {
                   <CardTitle className="text-sm line-clamp-1">{s.title}</CardTitle>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
+                  <ShareButton
+                    payload={formatSnippetShare(s)}
+                    className="h-7 w-7"
+                    title="Share snippet"
+                  />
                   <Button 
                     variant="ghost" 
                     size="icon" 
                     className="h-7 w-7 text-muted-foreground hover:text-foreground"
                     onClick={() => copyToClipboard(s.id, s.code)}
+                    title="Copy code"
                   >
                     {copiedId === s.id ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
                   </Button>

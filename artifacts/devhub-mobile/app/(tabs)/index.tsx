@@ -1,8 +1,6 @@
 import React from 'react';
 import {
   ActivityIndicator,
-  Platform,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -15,6 +13,7 @@ import { Feather } from '@expo/vector-icons';
 import { useGetDashboardSummary } from '@workspace/api-client-react';
 import type { DashboardSummary, Note, Reminder, Task } from '@workspace/api-client-react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getHeaderTopPadding, getTabBarLayout } from '@/constants/layout';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -167,14 +166,15 @@ export default function DashboardScreen() {
     weekday: 'long', month: 'long', day: 'numeric',
   });
 
-  const topPadding = Platform.OS === 'web' ? 67 : insets.top;
+  const topPadding = getHeaderTopPadding(insets.top);
+  const { contentPaddingBottom } = getTabBarLayout(insets.bottom);
 
   return (
     <ScrollView
       style={[styles.container, { backgroundColor: colors.background }]}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: topPadding + 16, paddingBottom: Platform.OS === 'web' ? 34 : 20 },
+        { paddingTop: topPadding + 16, paddingBottom: contentPaddingBottom },
       ]}
       refreshControl={
         <RefreshControl

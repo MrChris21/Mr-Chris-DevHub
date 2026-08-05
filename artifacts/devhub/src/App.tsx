@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Toaster } from '@/components/ui/toaster';
+import { Toaster as SonnerToaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ThemeProvider } from '@/components/theme-provider';
+import { ReminderAlarmWatcher } from '@/components/reminder-alarm-watcher';
 import NotFound from '@/pages/not-found';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
 import { Layout } from '@/components/layout/layout';
@@ -44,8 +45,11 @@ function App() {
         <TooltipProvider>
           <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
             <Router />
+            {/* Runs on every route so due reminders still alarm when not on /reminders */}
+            <ReminderAlarmWatcher />
           </WouterRouter>
-          <Toaster />
+          {/* Sonner is used by pages via `import { toast } from "sonner"` */}
+          <SonnerToaster />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

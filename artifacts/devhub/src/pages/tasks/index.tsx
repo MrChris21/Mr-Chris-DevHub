@@ -45,6 +45,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
+import { ShareButton } from "@/components/share-button";
+import { formatTaskShare } from "@/lib/share";
 
 function toDatetimeLocalValue(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -286,6 +288,11 @@ export default function TasksBoard() {
                 )}
               </div>
               <div className="flex items-center gap-0.5 shrink-0 -mt-1 -mr-1">
+                <ShareButton
+                  payload={formatTaskShare(task)}
+                  className="h-7 w-7"
+                  title="Share task"
+                />
                 <Button
                   variant="ghost"
                   size="icon"
@@ -586,6 +593,13 @@ export default function TasksBoard() {
               </div>
 
               <DialogFooter className="gap-2 flex-col-reverse sm:flex-row sm:justify-end">
+                <ShareButton
+                  payload={formatTaskShare(viewingTask)}
+                  label="Share"
+                  variant="outline"
+                  size="default"
+                  title="Share task"
+                />
                 <Button
                   type="button"
                   variant="outline"

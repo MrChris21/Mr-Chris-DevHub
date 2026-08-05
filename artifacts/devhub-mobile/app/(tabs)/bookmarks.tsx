@@ -27,6 +27,8 @@ import {
 } from '@workspace/api-client-react';
 import type { Bookmark } from '@workspace/api-client-react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getHeaderTopPadding, getTabBarLayout } from '@/constants/layout';
+import { formatBookmarkShare, shareContent } from '@/lib/share';
 
 function extractDomain(url: string): string {
   try {
@@ -75,6 +77,16 @@ function BookmarkCard({ bookmark }: { bookmark: Bookmark }) {
           <Text style={[styles.title, { color: colors.foreground }]} numberOfLines={2}>{bookmark.title}</Text>
           <Text style={[styles.domain, { color: accent.blue }]} numberOfLines={1}>{domain}</Text>
         </View>
+        <TouchableOpacity
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            shareContent(formatBookmarkShare(bookmark));
+          }}
+          hitSlop={10}
+          style={{ padding: 4, marginRight: 4 }}
+        >
+          <Feather name="share" size={14} color={colors.mutedForeground} />
+        </TouchableOpacity>
         <Feather name="external-link" size={14} color={colors.mutedForeground} />
       </View>
 
@@ -121,25 +133,33 @@ function EmptyState() {
 function CreateBookmarkModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const colors = useColors();
   const queryClient = useQueryClient();
+  const [url, setUrl] = React.useState('');
+  const [title, setTitle] = React.useState('');
+  const [description, setDescription] = React.useState('');
+  const [tagsRaw, setTagsRaw] = React.useState('');
+
+  const reset = () => {
+    setUrl('');
+    setTitle('');
+    setDescription('');
+    setTagsRaw('');
+  };
+  const handleClose = () => {
+    reset();
+    onClose();
+  };
+
   const { mutate: createBookmark, isPending } = useCreateBookmark({
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListBookmarksQueryKey() });
-        onClose();
+        handleClose();
       },
       onError: () => {
         Alert.alert('Error', 'Failed to save bookmark. Please try again.');
       },
     },
   });
-
-  const [url, setUrl] = React.useState('');
-  const [title, setTitle] = React.useState('');
-  const [description, setDescription] = React.useState('');
-  const [tagsRaw, setTagsRaw] = React.useState('');
-
-  const reset = () => { setUrl(''); setTitle(''); setDescription(''); setTagsRaw(''); };
-  const handleClose = () => { reset(); onClose(); };
 
   const handleSubmit = () => {
     const trimmedUrl = url.trim();
@@ -246,7 +266,8 @@ export default function BookmarksScreen() {
   const { data: bookmarks, isLoading, refetch, isRefetching } = useListBookmarks();
   const [showCreate, setShowCreate] = React.useState(false);
 
-  const topPadding = Platform.OS === 'web' ? 67 : insets.top;
+  const topPadding = getHeaderTopPadding(insets.top);
+  const { fabBottom, listPaddingBottom } = getTabBarLayout(insets.bottom);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -272,7 +293,7 @@ export default function BookmarksScreen() {
           data={bookmarks ?? []}
           keyExtractor={item => String(item.id)}
           renderItem={({ item }) => <BookmarkCard bookmark={item} />}
-          contentContainerStyle={[styles.listContent, { paddingBottom: Platform.OS === 'web' ? 34 : insets.bottom + 80 }]}
+          contentContainerStyle={[styles.listContent, { paddingBottom: listPaddingBottom }]}
           ListEmptyComponent={<EmptyState />}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} colors={[colors.primary]} />
@@ -285,7 +306,7 @@ export default function BookmarksScreen() {
       {/* FAB */}
       <TouchableOpacity
         onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowCreate(true); }}
-        style={[styles.fab, { backgroundColor: accent.purple, bottom: (Platform.OS === 'web' ? 24 : insets.bottom + 24) }]}
+        style={[styles.fab, { backgroundColor: accent.purple, bottom: fabBottom }]}
         activeOpacity={0.85}
       >
         <Feather name="plus" size={24} color="#fff" />
@@ -335,6 +356,7 @@ const styles = StyleSheet.create({
     position: 'absolute', right: 20, width: 54, height: 54, borderRadius: 27,
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 8,
+    zIndex: 10,
   },
 
   // Modal / sheet

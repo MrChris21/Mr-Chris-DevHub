@@ -38,42 +38,12 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
-
-const FIRED_KEY = "fired_reminders";
-
-function notificationsSupported(): boolean {
-  return typeof window !== "undefined" && "Notification" in window;
-}
-
-function getFiredIds(): number[] {
-  try {
-    const raw = localStorage.getItem(FIRED_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "number") : [];
-  } catch {
-    return [];
-  }
-}
-
-function markFired(id: number) {
-  try {
-    const fired = new Set(getFiredIds());
-    fired.add(id);
-    localStorage.setItem(FIRED_KEY, JSON.stringify([...fired]));
-  } catch {
-    // ignore storage failures (private mode, etc.)
-  }
-}
-
-function clearFired(id: number) {
-  try {
-    const fired = getFiredIds().filter((x) => x !== id);
-    localStorage.setItem(FIRED_KEY, JSON.stringify(fired));
-  } catch {
-    // ignore
-  }
-}
+import {
+  clearFired,
+  notificationsSupported,
+} from "@/lib/reminder-alarms";
+import { ShareButton } from "@/components/share-button";
+import { formatReminderShare } from "@/lib/share";
 
 function toDatetimeLocalValue(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -88,27 +58,6 @@ function toIsoFromDatetimeLocal(value: string): string | null {
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return null;
   return d.toISOString();
-}
-
-function fireAlarm(title: string, description?: string | null) {
-  toast("Reminder!", {
-    description: description?.trim() ? `${title} — ${description}` : title,
-    icon: <BellRing className="w-4 h-4 text-amber-500" />,
-    duration: 8000,
-  });
-
-  if (!notificationsSupported()) return;
-  try {
-    if (Notification.permission === "granted") {
-      new Notification("Mr. Chris DevHub", {
-        body: description?.trim() ? `${title}\n${description}` : title,
-        icon: "/icon-192.png",
-        tag: `reminder-${title}`,
-      });
-    }
-  } catch {
-    // Browser notification is best-effort; toast already shown
-  }
 }
 
 type EditForm = {
@@ -163,34 +112,7 @@ export default function Reminders() {
     queryClient.invalidateQueries({ queryKey: getListRemindersQueryKey() });
   }, [queryClient]);
 
-  // Safe alarm checker — never throws into React
-  useEffect(() => {
-    if (!reminders?.length) return;
-
-    const checkAlarms = () => {
-      try {
-        const now = Date.now();
-        const fired = new Set(getFiredIds());
-
-        for (const r of reminders) {
-          if (r.done) continue;
-          const due = new Date(r.dueAt).getTime();
-          if (Number.isNaN(due) || due > now) continue;
-          if (fired.has(r.id)) continue;
-
-          fireAlarm(r.title, r.description);
-          markFired(r.id);
-          fired.add(r.id);
-        }
-      } catch (err) {
-        console.error("Reminder alarm check failed:", err);
-      }
-    };
-
-    checkAlarms();
-    const interval = window.setInterval(checkAlarms, 10000);
-    return () => window.clearInterval(interval);
-  }, [reminders]);
+  // Alarm polling lives in <ReminderAlarmWatcher /> (App.tsx) so it works on every route.
 
   const requestNotifications = async () => {
     if (!notificationsSupported()) {
@@ -401,6 +323,7 @@ export default function Reminders() {
             </div>
 
             <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+              <ShareButton payload={formatReminderShare(r)} title="Share reminder" />
               <Button
                 variant="ghost"
                 size="icon"
@@ -632,6 +555,13 @@ export default function Reminders() {
                 </div>
               </div>
               <DialogFooter className="gap-2 flex-col-reverse sm:flex-row">
+                <ShareButton
+                  payload={formatReminderShare(viewing)}
+                  label="Share"
+                  variant="outline"
+                  size="default"
+                  title="Share reminder"
+                />
                 <Button type="button" variant="outline" onClick={() => setViewing(null)}>
                   Close
                 </Button>

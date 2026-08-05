@@ -11,6 +11,8 @@ import { getRelativeTime } from "@/lib/date-utils";
 import { Plus, Search, Pin, Trash2, Edit3, FileText } from "lucide-react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
+import { ShareButton } from "@/components/share-button";
+import { formatNoteShare } from "@/lib/share";
 
 export default function NotesList() {
   const [_, setLocation] = useLocation();
@@ -73,6 +75,11 @@ export default function NotesList() {
         <div className="flex items-start justify-between gap-2">
           <h3 className="font-semibold text-lg line-clamp-1 group-hover:text-primary transition-colors">{note.title || "Untitled"}</h3>
           <div className="flex items-center gap-1 shrink-0">
+            <ShareButton
+              payload={formatNoteShare(note)}
+              className="h-7 w-7"
+              title="Share note"
+            />
             <Button 
               variant="ghost" 
               size="icon" 

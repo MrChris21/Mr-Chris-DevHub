@@ -25,8 +25,14 @@ import {
 // ─── Module-level setup ───────────────────────────────────────────────────────
 
 // Point the shared API client at the deployed/dev domain.
-if (process.env.EXPO_PUBLIC_DOMAIN) {
-  setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
+// Prefer an explicit API URL; fall back to Replit-style domain; leave unset for same-origin (web).
+const apiBase =
+  process.env.EXPO_PUBLIC_API_URL ||
+  (process.env.EXPO_PUBLIC_DOMAIN
+    ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+    : null);
+if (apiBase) {
+  setBaseUrl(apiBase.replace(/\/+$/, ''));
 }
 
 // Configure how notifications look when the app is foregrounded.
@@ -101,10 +107,12 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
-  // Request notification permission on first launch (non-blocking).
+  // Request notification permission + Android channel before any reminder can schedule.
   useEffect(() => {
-    requestNotificationPermission();
-    setupAndroidChannel();
+    (async () => {
+      await setupAndroidChannel();
+      await requestNotificationPermission();
+    })();
   }, []);
 
   useEffect(() => {

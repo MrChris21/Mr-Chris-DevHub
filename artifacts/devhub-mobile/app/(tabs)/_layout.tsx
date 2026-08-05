@@ -55,11 +55,12 @@ function ClassicTabLayout() {
         tabBarStyle: {
           position: 'absolute',
           backgroundColor: isIOS ? 'transparent' : colors.background,
-          borderTopWidth: isWeb ? 1 : 0,
+          borderTopWidth: isWeb || !isIOS ? 1 : 0,
           borderTopColor: colors.border,
-          elevation: 0,
+          elevation: 8,
+          // Keep room for home indicator; height matches constants/layout.ts
           paddingBottom: isWeb ? 0 : safeAreaInsets.bottom,
-          ...(isWeb ? { height: 84 } : {}),
+          height: isWeb ? 84 : 49 + safeAreaInsets.bottom,
         },
         tabBarBackground: () =>
           isIOS ? (

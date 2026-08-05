@@ -11,6 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, Save, Pin, Check, X, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { ShareButton } from "@/components/share-button";
+import { formatNoteShare } from "@/lib/share";
 
 export default function NoteEditor() {
   const [match, params] = useRoute("/notes/:id");
@@ -120,6 +122,11 @@ export default function NoteEditor() {
           />
         </div>
         <div className="flex items-center gap-2 shrink-0 sm:ml-auto pl-8 sm:pl-0">
+          <ShareButton
+            payload={formatNoteShare({ title, content, tags })}
+            size="icon"
+            title="Share note"
+          />
           <Button 
             variant="ghost" 
             size="icon" 

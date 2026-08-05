@@ -12,6 +12,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Bookmark, Plus, Trash2, ExternalLink, Search } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { ShareButton } from "@/components/share-button";
+import { formatBookmarkShare } from "@/lib/share";
 
 export default function Bookmarks() {
   const queryClient = useQueryClient();
@@ -139,7 +141,12 @@ export default function Bookmarks() {
                       <p className="text-xs text-muted-foreground truncate">{new URL(b.url).hostname}</p>
                     </div>
                     <div className="flex items-center gap-1 shrink-0 -mt-2 -mr-2">
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => handleDelete(b.id, e)}>
+                      <ShareButton
+                        payload={formatBookmarkShare(b)}
+                        className="h-8 w-8"
+                        title="Share bookmark"
+                      />
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive sm:opacity-0 sm:group-hover:opacity-100 transition-opacity" onClick={(e) => handleDelete(b.id, e)}>
                         <Trash2 className="w-4 h-4" />
                       </Button>
                       <div className="h-8 w-8 flex items-center justify-center text-muted-foreground opacity-50 group-hover:opacity-100 transition-opacity">

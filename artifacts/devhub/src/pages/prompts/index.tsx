@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Sparkles, Plus, Copy, Trash2, Check, Search } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { ShareButton } from "@/components/share-button";
+import { formatPromptShare } from "@/lib/share";
 
 export default function Prompts() {
   const queryClient = useQueryClient();
@@ -155,9 +157,16 @@ export default function Prompts() {
                     {p.model || "general"}
                   </Badge>
                 </div>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive shrink-0 -mr-2 -mt-2" onClick={() => handleDelete(p.id)}>
-                  <Trash2 className="w-4 h-4" />
-                </Button>
+                <div className="flex items-center gap-0.5 shrink-0 -mr-2 -mt-2">
+                  <ShareButton
+                    payload={formatPromptShare(p)}
+                    className="h-8 w-8"
+                    title="Share prompt"
+                  />
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={() => handleDelete(p.id)}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="flex-1 flex flex-col gap-4">
                 <div className="relative flex-1 bg-background/50 rounded-md border border-border/50 p-3 overflow-hidden group">

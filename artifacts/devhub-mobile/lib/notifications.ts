@@ -44,7 +44,13 @@ export async function requestNotificationPermission(): Promise<boolean> {
   try {
     const { status: existing } = await Notifications.getPermissionsAsync();
     if (existing === 'granted') return true;
-    const { status } = await Notifications.requestPermissionsAsync();
+    const { status } = await Notifications.requestPermissionsAsync({
+      ios: {
+        allowAlert: true,
+        allowBadge: true,
+        allowSound: true,
+      },
+    });
     return status === 'granted';
   } catch {
     return false;
@@ -118,6 +124,8 @@ export async function scheduleReminderNotification(reminder: ReminderLike): Prom
         body: reminder.title,
         ...(reminder.description ? { subtitle: reminder.description } : {}),
         sound: 'default',
+        // Android needs channelId on content as well for reliable delivery.
+        ...(Platform.OS === 'android' ? { channelId: 'devhub-reminders' } : {}),
         data: {
           // The response handler reads this to decide where to navigate.
           screen: 'reminders',
@@ -126,6 +134,8 @@ export async function scheduleReminderNotification(reminder: ReminderLike): Prom
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.DATE,
         date: dueDate,
+        // Required on Android 8+ — without this, scheduled alarms never appear.
+        ...(Platform.OS === 'android' ? { channelId: 'devhub-reminders' } : {}),
       },
     });
   } catch (err) {

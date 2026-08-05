@@ -27,6 +27,8 @@ import {
 } from '@workspace/api-client-react';
 import type { Note } from '@workspace/api-client-react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { getHeaderTopPadding, getTabBarLayout } from '@/constants/layout';
+import { formatNoteShare, shareContent } from '@/lib/share';
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -53,6 +55,12 @@ function stripMarkdown(text: string): string {
 function NoteCard({ note, onPress }: { note: Note; onPress: (note: Note) => void }) {
   const colors = useColors();
   const preview = stripMarkdown(note.content);
+
+  const handleShare = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await shareContent(formatNoteShare(note));
+  };
+
   return (
     <TouchableOpacity
       onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); onPress(note); }}
@@ -65,7 +73,12 @@ function NoteCard({ note, onPress }: { note: Note; onPress: (note: Note) => void
           {note.pinned && <Feather name="bookmark" size={13} color={accent.amber} style={styles.pinIcon} />}
           <Text style={[styles.title, { color: colors.foreground }]} numberOfLines={1}>{note.title}</Text>
         </View>
-        <Text style={[styles.time, { color: colors.mutedForeground }]}>{timeAgo(note.updatedAt)}</Text>
+        <View style={styles.cardTopRight}>
+          <TouchableOpacity onPress={handleShare} hitSlop={10} style={styles.shareIconBtn}>
+            <Feather name="share" size={15} color={colors.mutedForeground} />
+          </TouchableOpacity>
+          <Text style={[styles.time, { color: colors.mutedForeground }]}>{timeAgo(note.updatedAt)}</Text>
+        </View>
       </View>
 
       {/* Preview */}
@@ -115,25 +128,46 @@ function NoteEditorModal({ visible, note, onClose }: NoteModalProps) {
 
   const isEdit = !!note;
 
+  const [title, setTitle] = React.useState('');
+  const [content, setContent] = React.useState('');
+  const [pinned, setPinned] = React.useState(false);
+
+  const reset = () => {
+    setTitle('');
+    setContent('');
+    setPinned(false);
+  };
+
+  const handleClose = () => {
+    reset();
+    onClose();
+  };
+
   const { mutate: createNote, isPending: isCreating } = useCreateNote({
     mutation: {
-      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListNotesQueryKey() }); onClose(); },
-      onError: () => { Alert.alert('Error', 'Failed to save note. Please try again.'); },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListNotesQueryKey() });
+        handleClose();
+      },
+      onError: () => {
+        Alert.alert('Error', 'Failed to save note. Please try again.');
+      },
     },
   });
 
   const { mutate: updateNote, isPending: isUpdating } = useUpdateNote({
     mutation: {
-      onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListNotesQueryKey() }); onClose(); },
-      onError: () => { Alert.alert('Error', 'Failed to update note. Please try again.'); },
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListNotesQueryKey() });
+        handleClose();
+      },
+      onError: () => {
+        Alert.alert('Error', 'Failed to update note. Please try again.');
+      },
     },
   });
 
-  const [title, setTitle] = React.useState('');
-  const [content, setContent] = React.useState('');
-  const [pinned, setPinned] = React.useState(false);
-
-  // Populate when editing
+  // Populate when editing / reset when creating
   React.useEffect(() => {
     if (visible) {
       setTitle(note?.title ?? '');
@@ -142,8 +176,6 @@ function NoteEditorModal({ visible, note, onClose }: NoteModalProps) {
     }
   }, [visible, note]);
 
-  const reset = () => { setTitle(''); setContent(''); setPinned(false); };
-  const handleClose = () => { reset(); onClose(); };
   const isPending = isCreating || isUpdating;
 
   const handleSubmit = () => {
@@ -165,13 +197,28 @@ function NoteEditorModal({ visible, note, onClose }: NoteModalProps) {
           {/* Sheet header */}
           <View style={styles.sheetHeader}>
             <Text style={[styles.sheetTitle, { color: colors.foreground }]}>{isEdit ? 'Edit Note' : 'New Note'}</Text>
-            <TouchableOpacity
-              onPress={() => setPinned(p => !p)}
-              style={[styles.pinBtn, { borderColor: pinned ? accent.amber : colors.border, backgroundColor: pinned ? accent.amber + '22' : 'transparent' }]}
-            >
-              <Feather name="bookmark" size={14} color={pinned ? accent.amber : colors.mutedForeground} />
-              <Text style={[styles.pinText, { color: pinned ? accent.amber : colors.mutedForeground }]}>Pin</Text>
-            </TouchableOpacity>
+            <View style={styles.sheetHeaderActions}>
+              {(isEdit || title.trim() || content.trim()) && (
+                <TouchableOpacity
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    shareContent(formatNoteShare({ title, content, tags: note?.tags ?? [] }));
+                  }}
+                  style={[styles.pinBtn, { borderColor: colors.border }]}
+                  hitSlop={8}
+                >
+                  <Feather name="share" size={14} color={colors.mutedForeground} />
+                  <Text style={[styles.pinText, { color: colors.mutedForeground }]}>Share</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                onPress={() => setPinned(p => !p)}
+                style={[styles.pinBtn, { borderColor: pinned ? accent.amber : colors.border, backgroundColor: pinned ? accent.amber + '22' : 'transparent' }]}
+              >
+                <Feather name="bookmark" size={14} color={pinned ? accent.amber : colors.mutedForeground} />
+                <Text style={[styles.pinText, { color: pinned ? accent.amber : colors.mutedForeground }]}>Pin</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Title */}
@@ -223,7 +270,8 @@ export default function NotesScreen() {
   const { data: notes, isLoading, refetch, isRefetching } = useListNotes();
   const [modalNote, setModalNote] = React.useState<Note | null | undefined>(undefined); // undefined = closed
 
-  const topPadding = Platform.OS === 'web' ? 67 : insets.top;
+  const topPadding = getHeaderTopPadding(insets.top);
+  const { fabBottom, listPaddingBottom } = getTabBarLayout(insets.bottom);
   const modalVisible = modalNote !== undefined;
 
   const openCreate = () => {
@@ -259,7 +307,7 @@ export default function NotesScreen() {
           data={notes ?? []}
           keyExtractor={item => String(item.id)}
           renderItem={({ item }) => <NoteCard note={item} onPress={openEdit} />}
-          contentContainerStyle={[styles.listContent, { paddingBottom: Platform.OS === 'web' ? 34 : insets.bottom + 80 }]}
+          contentContainerStyle={[styles.listContent, { paddingBottom: listPaddingBottom }]}
           ListEmptyComponent={<EmptyState />}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} colors={[colors.primary]} />
@@ -272,7 +320,7 @@ export default function NotesScreen() {
       {/* FAB */}
       <TouchableOpacity
         onPress={openCreate}
-        style={[styles.fab, { backgroundColor: accent.cyan, bottom: (Platform.OS === 'web' ? 24 : insets.bottom + 24) }]}
+        style={[styles.fab, { backgroundColor: accent.cyan, bottom: fabBottom }]}
         activeOpacity={0.85}
       >
         <Feather name="plus" size={24} color="#fff" />
@@ -298,6 +346,8 @@ const styles = StyleSheet.create({
 
   card: { borderRadius: 12, borderWidth: 1, padding: 14, gap: 8 },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
+  cardTopRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  shareIconBtn: { padding: 2 },
   titleRow: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   pinIcon: { marginRight: 5 },
   title: { fontSize: 15, fontWeight: '600', flex: 1 },
@@ -320,6 +370,7 @@ const styles = StyleSheet.create({
     position: 'absolute', right: 20, width: 54, height: 54, borderRadius: 27,
     alignItems: 'center', justifyContent: 'center',
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 8,
+    zIndex: 10,
   },
 
   // Modal / sheet
@@ -331,8 +382,9 @@ const styles = StyleSheet.create({
   },
   sheetTall: { maxHeight: '90%' },
   sheetHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
-  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  sheetTitle: { fontSize: 18, fontWeight: '700' },
+  sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16, gap: 8 },
+  sheetHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sheetTitle: { fontSize: 18, fontWeight: '700', flexShrink: 1 },
   pinBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, borderWidth: 1, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 },
   pinText: { fontSize: 12, fontWeight: '600' },
 

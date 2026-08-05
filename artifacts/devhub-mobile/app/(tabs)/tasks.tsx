@@ -17,15 +17,18 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useColors } from '@/hooks/useColors';
 import { accent } from '@/constants/colors';
+import { getHeaderTopPadding, getTabBarLayout } from '@/constants/layout';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import {
   useListTasks,
   useCreateTask,
   useUpdateTask,
+  useDeleteTask,
   getListTasksQueryKey,
 } from '@workspace/api-client-react';
 import type { Task } from '@workspace/api-client-react';
+import { formatTaskShare, shareContent } from '@/lib/share';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Status = 'todo' | 'in_progress' | 'done';
@@ -48,7 +51,15 @@ function priorityColor(p: string): string {
 }
 
 // ─── TaskCard ────────────────────────────────────────────────────────────────
-function TaskCard({ task, onToggleDone }: { task: Task; onToggleDone: (task: Task) => void }) {
+function TaskCard({
+  task,
+  onToggleDone,
+  onEdit,
+}: {
+  task: Task;
+  onToggleDone: (task: Task) => void;
+  onEdit: (task: Task) => void;
+}) {
   const colors = useColors();
   const status = STATUS_META[task.status as Status] ?? STATUS_META.todo;
   const pc = priorityColor(task.priority);
@@ -60,7 +71,16 @@ function TaskCard({ task, onToggleDone }: { task: Task; onToggleDone: (task: Tas
   };
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <Pressable
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        onEdit(task);
+      }}
+      style={({ pressed }) => [
+        styles.card,
+        { backgroundColor: colors.card, borderColor: colors.border, opacity: pressed ? 0.9 : 1 },
+      ]}
+    >
       <View style={styles.cardTop}>
         <TouchableOpacity onPress={handleToggle} hitSlop={12} style={styles.statusIconBtn}>
           <Feather name={status.iconName} size={18} color={status.color} />
@@ -75,6 +95,16 @@ function TaskCard({ task, onToggleDone }: { task: Task; onToggleDone: (task: Tas
         >
           {task.title}
         </Text>
+        <TouchableOpacity
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            shareContent(formatTaskShare(task));
+          }}
+          hitSlop={10}
+          style={{ padding: 4, marginRight: 4 }}
+        >
+          <Feather name="share" size={14} color={colors.mutedForeground} />
+        </TouchableOpacity>
         <View style={[styles.priorityBadge, { borderColor: pc + '55', backgroundColor: pc + '18' }]}>
           <Text style={[styles.priorityText, { color: pc }]}>{task.priority}</Text>
         </View>
@@ -95,7 +125,7 @@ function TaskCard({ task, onToggleDone }: { task: Task; onToggleDone: (task: Tas
           ))}
         </View>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -127,18 +157,52 @@ function EmptyState() {
   );
 }
 
-// ─── Create modal ─────────────────────────────────────────────────────────────
-function CreateTaskModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+// ─── Create / Edit modal ──────────────────────────────────────────────────────
+function TaskEditorModal({
+  visible,
+  task,
+  onClose,
+}: {
+  visible: boolean;
+  task: Task | null;
+  onClose: () => void;
+}) {
   const colors = useColors();
   const queryClient = useQueryClient();
-  const { mutate: createTask, isPending } = useCreateTask({
+  const isEdit = !!task;
+
+  const { mutate: createTask, isPending: isCreating } = useCreateTask({
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
-        onClose();
+        resetAndClose();
       },
       onError: () => {
         Alert.alert('Error', 'Failed to create task. Please try again.');
+      },
+    },
+  });
+
+  const { mutate: updateTask, isPending: isUpdating } = useUpdateTask({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
+        resetAndClose();
+      },
+      onError: () => {
+        Alert.alert('Error', 'Failed to update task. Please try again.');
+      },
+    },
+  });
+
+  const { mutate: deleteTask, isPending: isDeleting } = useDeleteTask({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListTasksQueryKey() });
+        resetAndClose();
+      },
+      onError: () => {
+        Alert.alert('Error', 'Failed to delete task. Please try again.');
       },
     },
   });
@@ -147,39 +211,119 @@ function CreateTaskModal({ visible, onClose }: { visible: boolean; onClose: () =
   const [description, setDescription] = React.useState('');
   const [priority, setPriority] = React.useState<Priority>('medium');
   const [status, setStatus] = React.useState<Status>('todo');
+  const [tagsRaw, setTagsRaw] = React.useState('');
 
   const reset = () => {
     setTitle('');
     setDescription('');
     setPriority('medium');
     setStatus('todo');
+    setTagsRaw('');
   };
 
-  const handleClose = () => {
+  const resetAndClose = () => {
     reset();
     onClose();
   };
+
+  React.useEffect(() => {
+    if (!visible) return;
+    if (task) {
+      setTitle(task.title ?? '');
+      setDescription(task.description ?? '');
+      setPriority((task.priority as Priority) || 'medium');
+      setStatus((task.status as Status) || 'todo');
+      setTagsRaw((task.tags ?? []).join(', '));
+    } else {
+      reset();
+    }
+  }, [visible, task]);
+
+  const isPending = isCreating || isUpdating || isDeleting;
 
   const handleSubmit = () => {
     if (!title.trim()) {
       Alert.alert('Title required', 'Please enter a task title.');
       return;
     }
-    createTask({ data: { title: title.trim(), description: description.trim() || undefined, priority, status } });
+    const tags = tagsRaw
+      .split(',')
+      .map(t => t.trim())
+      .filter(Boolean);
+    const data = {
+      title: title.trim(),
+      description: description.trim() || undefined,
+      priority,
+      status,
+      tags,
+    };
+    if (isEdit) {
+      updateTask({ id: task!.id, data });
+    } else {
+      createTask({ data });
+    }
+  };
+
+  const handleDelete = () => {
+    if (!task) return;
+    Alert.alert('Delete task', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => deleteTask({ id: task.id }),
+      },
+    ]);
   };
 
   return (
-    <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen" onRequestClose={handleClose}>
+    <Modal visible={visible} animationType="slide" transparent presentationStyle="overFullScreen" onRequestClose={resetAndClose}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalOverlay}>
-        <Pressable style={styles.modalBackdrop} onPress={handleClose} />
+        <Pressable style={styles.modalBackdrop} onPress={resetAndClose} />
         <View style={[styles.sheet, { backgroundColor: colors.card, borderColor: colors.border }]}>
-          {/* Handle */}
           <View style={[styles.sheetHandle, { backgroundColor: colors.border }]} />
 
-          <Text style={[styles.sheetTitle, { color: colors.foreground }]}>New Task</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4, gap: 8 }}>
+            <Text style={[styles.sheetTitle, { color: colors.foreground, marginBottom: 0, flex: 1 }]}>
+              {isEdit ? 'Edit Task' : 'New Task'}
+            </Text>
+            {(isEdit || title.trim()) && (
+              <TouchableOpacity
+                onPress={() => {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                  shareContent(
+                    formatTaskShare({
+                      title,
+                      description,
+                      status,
+                      priority,
+                      dueAt: task?.dueAt,
+                      tags: tagsRaw
+                        .split(',')
+                        .map(t => t.trim())
+                        .filter(Boolean),
+                    }),
+                  );
+                }}
+                hitSlop={8}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 5,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                  borderRadius: 8,
+                  paddingHorizontal: 10,
+                  paddingVertical: 6,
+                }}
+              >
+                <Feather name="share" size={14} color={colors.mutedForeground} />
+                <Text style={{ fontSize: 12, fontWeight: '600', color: colors.mutedForeground }}>Share</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            {/* Title */}
             <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Title *</Text>
             <TextInput
               style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
@@ -187,11 +331,10 @@ function CreateTaskModal({ visible, onClose }: { visible: boolean; onClose: () =
               placeholderTextColor={colors.mutedForeground}
               value={title}
               onChangeText={setTitle}
-              autoFocus
+              autoFocus={!isEdit}
               returnKeyType="next"
             />
 
-            {/* Description */}
             <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Description</Text>
             <TextInput
               style={[styles.input, styles.inputMultiline, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
@@ -204,7 +347,6 @@ function CreateTaskModal({ visible, onClose }: { visible: boolean; onClose: () =
               textAlignVertical="top"
             />
 
-            {/* Priority */}
             <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Priority</Text>
             <View style={styles.segmentRow}>
               {(['low', 'medium', 'high'] as Priority[]).map(p => {
@@ -225,7 +367,6 @@ function CreateTaskModal({ visible, onClose }: { visible: boolean; onClose: () =
               })}
             </View>
 
-            {/* Status */}
             <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Status</Text>
             <View style={styles.segmentRow}>
               {(['todo', 'in_progress', 'done'] as Status[]).map(s => {
@@ -245,21 +386,48 @@ function CreateTaskModal({ visible, onClose }: { visible: boolean; onClose: () =
                 );
               })}
             </View>
+
+            <Text style={[styles.fieldLabel, { color: colors.mutedForeground }]}>Tags</Text>
+            <TextInput
+              style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]}
+              placeholder="work, urgent (comma-separated)"
+              placeholderTextColor={colors.mutedForeground}
+              value={tagsRaw}
+              onChangeText={setTagsRaw}
+              autoCapitalize="none"
+              returnKeyType="done"
+            />
           </ScrollView>
 
-          {/* Actions */}
           <View style={styles.sheetActions}>
-            <TouchableOpacity onPress={handleClose} style={[styles.btnSecondary, { borderColor: colors.border }]}>
-              <Text style={[styles.btnSecondaryText, { color: colors.mutedForeground }]}>Cancel</Text>
-            </TouchableOpacity>
+            {isEdit ? (
+              <TouchableOpacity
+                onPress={handleDelete}
+                disabled={isPending}
+                style={[styles.btnSecondary, { borderColor: accent.rose + '66' }]}
+              >
+                <Text style={[styles.btnSecondaryText, { color: accent.rose }]}>Delete</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={resetAndClose} style={[styles.btnSecondary, { borderColor: colors.border }]}>
+                <Text style={[styles.btnSecondaryText, { color: colors.mutedForeground }]}>Cancel</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={handleSubmit}
               disabled={isPending}
               style={[styles.btnPrimary, { backgroundColor: accent.emerald, opacity: isPending ? 0.6 : 1 }]}
             >
-              <Text style={styles.btnPrimaryText}>{isPending ? 'Saving…' : 'Add Task'}</Text>
+              <Text style={styles.btnPrimaryText}>
+                {isPending ? 'Saving…' : isEdit ? 'Save Changes' : 'Add Task'}
+              </Text>
             </TouchableOpacity>
           </View>
+          {isEdit && (
+            <TouchableOpacity onPress={resetAndClose} style={styles.cancelLink}>
+              <Text style={[styles.cancelLinkText, { color: colors.mutedForeground }]}>Cancel</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </KeyboardAvoidingView>
     </Modal>
@@ -272,9 +440,11 @@ export default function TasksScreen() {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const { data: tasks, isLoading, refetch, isRefetching } = useListTasks();
-  const [showCreate, setShowCreate] = React.useState(false);
+  const [editorTask, setEditorTask] = React.useState<Task | null | undefined>(undefined);
 
-  const topPadding = Platform.OS === 'web' ? 67 : insets.top;
+  const topPadding = getHeaderTopPadding(insets.top);
+  const { fabBottom, listPaddingBottom } = getTabBarLayout(insets.bottom);
+  const modalVisible = editorTask !== undefined;
 
   const { mutate: updateTask } = useUpdateTask({
     mutation: {
@@ -282,7 +452,7 @@ export default function TasksScreen() {
         await queryClient.cancelQueries({ queryKey: getListTasksQueryKey() });
         const prev = queryClient.getQueryData<Task[]>(getListTasksQueryKey());
         queryClient.setQueryData<Task[]>(getListTasksQueryKey(), old =>
-          old?.map(t => t.id === id ? { ...t, ...data } : t) ?? []
+          old?.map(t => (t.id === id ? { ...t, ...data } : t)) ?? [],
         );
         return { prev };
       },
@@ -312,7 +482,6 @@ export default function TasksScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Header */}
       <View style={[styles.header, { borderBottomColor: colors.border, paddingTop: topPadding + 12 }]}>
         <View style={styles.headerLeft}>
           <Feather name="check-square" size={18} color={accent.emerald} />
@@ -335,30 +504,42 @@ export default function TasksScreen() {
         <SectionList
           sections={sections}
           keyExtractor={item => String(item.id)}
-          renderItem={({ item }) => <TaskCard task={item} onToggleDone={handleToggleDone} />}
+          renderItem={({ item }) => (
+            <TaskCard
+              task={item}
+              onToggleDone={handleToggleDone}
+              onEdit={t => setEditorTask(t)}
+            />
+          )}
           renderSectionHeader={({ section }) => {
             const meta = STATUS_META[section.key as Status];
             return <SectionHeaderComp title={meta.label} count={section.data.length} color={meta.color} />;
           }}
-          contentContainerStyle={[styles.listContent, { paddingBottom: Platform.OS === 'web' ? 34 : insets.bottom + 80 }]}
+          contentContainerStyle={[styles.listContent, { paddingBottom: listPaddingBottom }]}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} colors={[colors.primary]} />
           }
-          stickySectionHeadersEnabled={true}
+          stickySectionHeadersEnabled
           showsVerticalScrollIndicator={false}
         />
       )}
 
-      {/* FAB */}
       <TouchableOpacity
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); setShowCreate(true); }}
-        style={[styles.fab, { backgroundColor: accent.emerald, bottom: (Platform.OS === 'web' ? 24 : insets.bottom + 24) }]}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          setEditorTask(null);
+        }}
+        style={[styles.fab, { backgroundColor: accent.emerald, bottom: fabBottom }]}
         activeOpacity={0.85}
       >
         <Feather name="plus" size={24} color="#fff" />
       </TouchableOpacity>
 
-      <CreateTaskModal visible={showCreate} onClose={() => setShowCreate(false)} />
+      <TaskEditorModal
+        visible={modalVisible}
+        task={editorTask ?? null}
+        onClose={() => setEditorTask(undefined)}
+      />
     </View>
   );
 }
@@ -367,8 +548,12 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
 
   header: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingBottom: 12, borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerTitle: { fontSize: 20, fontWeight: '700' },
@@ -389,7 +574,13 @@ const styles = StyleSheet.create({
   taskTitleDone: { textDecorationLine: 'line-through' },
   description: { fontSize: 13, lineHeight: 18, marginLeft: 28 },
 
-  priorityBadge: { borderRadius: 4, borderWidth: 1, paddingHorizontal: 7, paddingVertical: 2, alignSelf: 'flex-start' },
+  priorityBadge: {
+    borderRadius: 4,
+    borderWidth: 1,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    alignSelf: 'flex-start',
+  },
   priorityText: { fontSize: 10, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.5 },
 
   tags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginLeft: 28 },
@@ -404,22 +595,43 @@ const styles = StyleSheet.create({
   emptySubtitle: { fontSize: 14, textAlign: 'center', paddingHorizontal: 32 },
 
   fab: {
-    position: 'absolute', right: 20, width: 54, height: 54, borderRadius: 27,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 8,
+    position: 'absolute',
+    right: 20,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 6,
+    elevation: 8,
+    zIndex: 10,
   },
 
-  // Modal / sheet
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.5)' },
   sheet: {
-    borderTopLeftRadius: 20, borderTopRightRadius: 20, borderWidth: 1,
-    paddingHorizontal: 20, paddingBottom: 32, paddingTop: 12, maxHeight: '85%',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 20,
+    paddingBottom: 32,
+    paddingTop: 12,
+    maxHeight: '88%',
   },
   sheetHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
   sheetTitle: { fontSize: 18, fontWeight: '700', marginBottom: 20 },
 
-  fieldLabel: { fontSize: 12, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 6, marginTop: 14 },
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    marginBottom: 6,
+    marginTop: 14,
+  },
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 15 },
   inputMultiline: { minHeight: 80, paddingTop: 10 },
 
@@ -432,4 +644,6 @@ const styles = StyleSheet.create({
   btnSecondaryText: { fontSize: 15, fontWeight: '600' },
   btnPrimary: { flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   btnPrimaryText: { fontSize: 15, fontWeight: '600', color: '#fff' },
+  cancelLink: { alignItems: 'center', marginTop: 12, paddingVertical: 4 },
+  cancelLinkText: { fontSize: 14, fontWeight: '500' },
 });

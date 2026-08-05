@@ -12,6 +12,8 @@ import { formatDateTime, formatTime, formatDate, isOverdue } from "@/lib/date-ut
 import { CalendarDays, Plus, Trash2, Video, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
+import { ShareButton } from "@/components/share-button";
+import { formatMeetingShare } from "@/lib/share";
 
 export default function Meetings() {
   const queryClient = useQueryClient();
@@ -85,6 +87,7 @@ export default function Meetings() {
               </a>
             </Button>
           )}
+          <ShareButton payload={formatMeetingShare(m)} title="Share meeting" />
           <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" onClick={() => handleDelete(m.id)}>
             <Trash2 className="w-4 h-4" />
           </Button>
