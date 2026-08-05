@@ -35,9 +35,6 @@ import {
 import {
   Plus,
   Trash2,
-  CheckCircle2,
-  Circle,
-  Clock,
   Pencil,
   CalendarDays,
   Tag,
