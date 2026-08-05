@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -64,6 +65,7 @@ function TaskCard({
   const status = STATUS_META[task.status as Status] ?? STATUS_META.todo;
   const pc = priorityColor(task.priority);
   const isDone = task.status === 'done';
+  const isInProgress = task.status === 'in_progress';
 
   const handleToggle = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -83,7 +85,15 @@ function TaskCard({
     >
       <View style={styles.cardTop}>
         <TouchableOpacity onPress={handleToggle} hitSlop={12} style={styles.statusIconBtn}>
-          <Feather name={status.iconName} size={18} color={status.color} />
+          {isInProgress ? (
+            <Image
+              source={require('../../assets/images/workspace.gif')}
+              style={styles.workingGif}
+              resizeMode="contain"
+            />
+          ) : (
+            <Feather name={status.iconName} size={18} color={status.color} />
+          )}
         </TouchableOpacity>
         <Text
           style={[
@@ -130,11 +140,29 @@ function TaskCard({
 }
 
 // ─── Section header ───────────────────────────────────────────────────────────
-function SectionHeaderComp({ title, count, color }: { title: string; count: number; color: string }) {
+function SectionHeaderComp({
+  title,
+  count,
+  color,
+  showWorkingGif,
+}: {
+  title: string;
+  count: number;
+  color: string;
+  showWorkingGif?: boolean;
+}) {
   const colors = useColors();
   return (
     <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
-      <View style={[styles.sectionDot, { backgroundColor: color }]} />
+      {showWorkingGif ? (
+        <Image
+          source={require('../../assets/images/workspace.gif')}
+          style={styles.sectionWorkingGif}
+          resizeMode="contain"
+        />
+      ) : (
+        <View style={[styles.sectionDot, { backgroundColor: color }]} />
+      )}
       <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>{title}</Text>
       <View style={[styles.sectionBadge, { backgroundColor: color + '22' }]}>
         <Text style={[styles.sectionCount, { color }]}>{count}</Text>
@@ -513,7 +541,14 @@ export default function TasksScreen() {
           )}
           renderSectionHeader={({ section }) => {
             const meta = STATUS_META[section.key as Status];
-            return <SectionHeaderComp title={meta.label} count={section.data.length} color={meta.color} />;
+            return (
+              <SectionHeaderComp
+                title={meta.label}
+                count={section.data.length}
+                color={meta.color}
+                showWorkingGif={section.key === 'in_progress'}
+              />
+            );
           }}
           contentContainerStyle={[styles.listContent, { paddingBottom: listPaddingBottom }]}
           refreshControl={
@@ -570,6 +605,8 @@ const styles = StyleSheet.create({
   card: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 8, gap: 8 },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   statusIconBtn: { marginTop: 1 },
+  workingGif: { width: 28, height: 28 },
+  sectionWorkingGif: { width: 18, height: 18 },
   taskTitle: { flex: 1, fontSize: 14, fontWeight: '500', lineHeight: 20 },
   taskTitleDone: { textDecorationLine: 'line-through' },
   description: { fontSize: 13, lineHeight: 18, marginLeft: 28 },

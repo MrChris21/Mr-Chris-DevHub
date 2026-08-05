@@ -238,7 +238,18 @@ export default function TasksBoard() {
 
   const columns: { id: TaskStatus; label: string; icon: React.ReactNode }[] = [
     { id: "todo", label: "To Do", icon: <Circle className="w-4 h-4 text-muted-foreground" /> },
-    { id: "in_progress", label: "In Progress", icon: <Clock className="w-4 h-4 text-blue-500" /> },
+    {
+      id: "in_progress",
+      label: "In Progress",
+      icon: (
+        <img
+          src={`${import.meta.env.BASE_URL}workspace.gif`}
+          alt="Working"
+          className="w-5 h-5 object-contain"
+          draggable={false}
+        />
+      ),
+    },
     { id: "done", label: "Done", icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" /> },
   ];
 
@@ -271,6 +282,15 @@ export default function TasksBoard() {
         >
           <CardContent className="p-4 flex flex-col gap-3">
             <div className="flex items-start gap-2">
+              {task.status === "in_progress" && (
+                <img
+                  src={`${import.meta.env.BASE_URL}workspace.gif`}
+                  alt="In progress — working"
+                  title="Working…"
+                  className="w-9 h-9 sm:w-10 sm:h-10 object-contain shrink-0 mt-0.5 select-none"
+                  draggable={false}
+                />
+              )}
               <div className="flex-1 min-w-0 space-y-2">
                 <p
                   className={`text-sm font-semibold leading-snug break-words whitespace-pre-wrap ${
@@ -545,9 +565,19 @@ export default function TasksBoard() {
                   <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
                     Status
                   </p>
-                  <Badge variant="secondary" className="font-mono capitalize">
-                    {viewingTask.status.replace("_", " ")}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    {viewingTask.status === "in_progress" && (
+                      <img
+                        src={`${import.meta.env.BASE_URL}workspace.gif`}
+                        alt="Working"
+                        className="w-8 h-8 object-contain"
+                        draggable={false}
+                      />
+                    )}
+                    <Badge variant="secondary" className="font-mono capitalize">
+                      {viewingTask.status.replace("_", " ")}
+                    </Badge>
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground">
