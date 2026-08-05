@@ -34,9 +34,11 @@ import {
   cancelReminderNotification,
   ensureAlarmReady,
   getNotificationPermissionStatus,
+  isAlarmPlaying,
   openNotificationSettings,
   scheduleReminderNotification,
   scheduleTestAlarm,
+  stopAlarmPlayer,
   syncReminderNotifications,
 } from '@/lib/notifications';
 import { formatReminderShare, shareContent } from '@/lib/share';
@@ -600,6 +602,7 @@ export default function RemindersScreen() {
   const [alarmStatus, setAlarmStatus] = React.useState<
     'granted' | 'denied' | 'undetermined' | 'unsupported'
   >('undetermined');
+  const [ringing, setRinging] = React.useState(false);
 
   const topPadding = getHeaderTopPadding(insets.top);
   const { fabBottom, listPaddingBottom } = getTabBarLayout(insets.bottom);
@@ -614,6 +617,12 @@ export default function RemindersScreen() {
     ensureAlarmReady().then(ok => setAlarmStatus(ok ? 'granted' : 'denied')).catch(() => {});
     refreshAlarmStatus();
   }, [refreshAlarmStatus]);
+
+  // Poll in-app alarm player so we can show a Dismiss banner
+  React.useEffect(() => {
+    const id = setInterval(() => setRinging(isAlarmPlaying()), 500);
+    return () => clearInterval(id);
+  }, []);
 
   React.useEffect(() => {
     if (reminders) {
@@ -719,6 +728,48 @@ export default function RemindersScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {ringing && (
+        <View
+          style={{
+            position: 'absolute',
+            left: 12,
+            right: 12,
+            top: topPadding + 8,
+            zIndex: 50,
+            borderRadius: 14,
+            padding: 14,
+            backgroundColor: accent.rose,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            shadowColor: '#000',
+            shadowOpacity: 0.35,
+            shadowRadius: 10,
+            elevation: 12,
+          }}
+        >
+          <Feather name="bell" size={22} color="#fff" />
+          <View style={{ flex: 1 }}>
+            <Text style={{ color: '#fff', fontWeight: '800', fontSize: 15 }}>ALARM RINGING</Text>
+            <Text style={{ color: '#ffe4e6', fontSize: 12 }}>Sound + vibration until you dismiss</Text>
+          </View>
+          <TouchableOpacity
+            onPress={async () => {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              await stopAlarmPlayer();
+              setRinging(false);
+            }}
+            style={{
+              backgroundColor: '#fff',
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+              borderRadius: 10,
+            }}
+          >
+            <Text style={{ color: accent.rose, fontWeight: '800' }}>Dismiss</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       <View style={[styles.header, { borderBottomColor: colors.border, paddingTop: topPadding + 12 }]}>
         <View style={styles.headerLeft}>
           <Feather name="bell" size={18} color={accent.amber} />

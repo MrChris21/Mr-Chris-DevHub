@@ -3,6 +3,7 @@ import { Toaster as SonnerToaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { ThemeProvider } from '@/components/theme-provider';
 import { ReminderAlarmWatcher } from '@/components/reminder-alarm-watcher';
+import { AlarmClockOverlay } from '@/components/alarm-clock-overlay';
 import NotFound from '@/pages/not-found';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
 import { Layout } from '@/components/layout/layout';
@@ -48,6 +49,8 @@ function App() {
             {/* Runs on every route so due reminders still alarm when not on /reminders */}
             <ReminderAlarmWatcher />
           </WouterRouter>
+          {/* Full-screen alarm clock until user dismisses */}
+          <AlarmClockOverlay />
           {/* Sonner is used by pages via `import { toast } from "sonner"` */}
           <SonnerToaster />
         </TooltipProvider>

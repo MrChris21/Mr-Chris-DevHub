@@ -1,64 +1,82 @@
 /**
- * Reminder alarm utilities for DevHub Mobile.
+ * Reminder alarm utilities for DevHub Mobile (iPhone + Android).
  *
- * Schedules OS-level local notifications so they still fire with sound +
- * vibration when the app is backgrounded or fully closed.
+ * Strategy for "alarm clock" behavior:
+ * 1. Schedule a burst of OS local notifications at due time (+ every few seconds)
+ *    so the phone keeps sounding even if the first notification is missed.
+ * 2. When a notification is received while the app is open, start looping
+ *    sound + vibration via alarm-player (plays in silent mode on iOS).
+ * 3. Android channel uses ALARM audio usage + MAX importance.
  */
 
 import * as Notifications from 'expo-notifications';
 import { Linking, Platform } from 'react-native';
+import { startAlarmPlayer, stopAlarmPlayer } from '@/lib/alarm-player';
+// re-exported at bottom
 
-/** Stable identifier prefix so we can cancel by reminder ID. */
 const ID_PREFIX = 'devhub-reminder-';
-
-/** High-priority Android channel used as an alarm (sound + vibrate). */
 export const ALARM_CHANNEL_ID = 'devhub-alarms';
 
-export function notificationId(reminderId: number): string {
-  return `${ID_PREFIX}${reminderId}`;
+/** How long the multi-notification "ring storm" lasts after due time. */
+const RING_BURST_SECONDS = 60;
+/** Spacing between follow-up rings in the burst. */
+const RING_INTERVAL_SECONDS = 5;
+
+export function notificationId(reminderId: number, burstIndex = 0): string {
+  return burstIndex === 0 ? `${ID_PREFIX}${reminderId}` : `${ID_PREFIX}${reminderId}-b${burstIndex}`;
 }
 
-// ─── Setup ────────────────────────────────────────────────────────────────────
-
-/**
- * Configure how notifications behave while the app is in the foreground.
- * Call once at module level before any component mounts.
- */
 export function configureNotificationHandler(): void {
   if (Platform.OS === 'web') return;
   Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowAlert: true,
-      shouldPlaySound: true,
-      shouldSetBadge: true,
-      shouldShowBanner: true,
-      shouldShowList: true,
-    }),
+    handleNotification: async () => {
+      // When a notification arrives in foreground, also start looping player
+      void startAlarmPlayer();
+      return {
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+      };
+    },
   });
 }
 
-/**
- * Request permission to send local notifications (alerts + sound).
- * Returns `true` if permission was already granted or the user just granted it.
- */
+/** Call once after notifications are configured — ring when user taps a notif. */
+export function attachAlarmResponseListener(): { remove: () => void } {
+  if (Platform.OS === 'web') return { remove: () => {} };
+  const sub = Notifications.addNotificationReceivedListener(() => {
+    void startAlarmPlayer();
+  });
+  const sub2 = Notifications.addNotificationResponseReceivedListener(() => {
+    void startAlarmPlayer();
+  });
+  return {
+    remove: () => {
+      sub.remove();
+      sub2.remove();
+    },
+  };
+}
+
 export async function requestNotificationPermission(): Promise<boolean> {
   if (Platform.OS === 'web') return false;
   try {
-    const { status: existing, granted, ios } = await Notifications.getPermissionsAsync();
-    if (existing === 'granted' || granted) return true;
+    const current = await Notifications.getPermissionsAsync();
+    if (current.granted || current.status === 'granted') return true;
 
-    const { status } = await Notifications.requestPermissionsAsync({
+    const { status, granted, ios } = await Notifications.requestPermissionsAsync({
       ios: {
         allowAlert: true,
         allowBadge: true,
         allowSound: true,
-        allowCriticalAlerts: false, // requires Apple entitlement
+        allowCriticalAlerts: false,
         provideAppNotificationSettings: true,
       },
     });
 
-    // On some iOS versions provisional/ephemeral still allow delivery.
-    if (status === 'granted') return true;
+    if (granted || status === 'granted') return true;
     if (ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL) return true;
     return false;
   } catch {
@@ -66,21 +84,16 @@ export async function requestNotificationPermission(): Promise<boolean> {
   }
 }
 
-/**
- * Android 8+ requires a notification channel. We use MAX importance + ALARM
- * audio usage so the phone rings and vibrates even when the screen is off.
- */
 export async function setupAndroidChannel(): Promise<void> {
   if (Platform.OS !== 'android') return;
   try {
-    // Primary alarm channel
     await Notifications.setNotificationChannelAsync(ALARM_CHANNEL_ID, {
       name: 'Reminder Alarms',
-      description: 'Loud sound + vibration when a reminder is due (works with app closed)',
+      description: 'Rings and vibrates like an alarm clock when a reminder is due',
       importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 500, 250, 500, 250, 500, 250, 800],
+      vibrationPattern: [0, 600, 200, 600, 200, 800],
       lightColor: '#f59e0b',
-      sound: 'default',
+      sound: 'alarm.wav',
       enableVibrate: true,
       enableLights: true,
       showBadge: true,
@@ -95,32 +108,36 @@ export async function setupAndroidChannel(): Promise<void> {
         },
       },
     });
-
-    // Keep the older channel name so existing installs still work if referenced.
-    await Notifications.setNotificationChannelAsync('devhub-reminders', {
-      name: 'Reminders',
-      description: 'Mr. Chris DevHub reminder alerts',
-      importance: Notifications.AndroidImportance.MAX,
-      vibrationPattern: [0, 500, 250, 500, 250, 500],
-      lightColor: '#f59e0b',
-      sound: 'default',
-      enableVibrate: true,
-      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-      audioAttributes: {
-        usage: Notifications.AndroidAudioUsage.ALARM,
-        contentType: Notifications.AndroidAudioContentType.SONIFICATION,
-        flags: {
-          enforceAudibility: true,
-          requestHardwareAudioVideoSynchronization: false,
-        },
-      },
-    });
   } catch {
-    // non-fatal
+    // Fallback to default sound if custom sound isn't bundled yet
+    try {
+      await Notifications.setNotificationChannelAsync(ALARM_CHANNEL_ID, {
+        name: 'Reminder Alarms',
+        description: 'Rings and vibrates like an alarm clock when a reminder is due',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 600, 200, 600, 200, 800],
+        lightColor: '#f59e0b',
+        sound: 'default',
+        enableVibrate: true,
+        enableLights: true,
+        showBadge: true,
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+        bypassDnd: true,
+        audioAttributes: {
+          usage: Notifications.AndroidAudioUsage.ALARM,
+          contentType: Notifications.AndroidAudioContentType.SONIFICATION,
+          flags: {
+            enforceAudibility: true,
+            requestHardwareAudioVideoSynchronization: false,
+          },
+        },
+      });
+    } catch {
+      // non-fatal
+    }
   }
 }
 
-/** Call once on app launch: channel + permissions. */
 export async function ensureAlarmReady(): Promise<boolean> {
   if (Platform.OS === 'web') return false;
   await setupAndroidChannel();
@@ -141,7 +158,6 @@ export async function getNotificationPermissionStatus(): Promise<
   }
 }
 
-/** Open system settings so the user can enable notifications / exact alarms. */
 export async function openNotificationSettings(): Promise<void> {
   try {
     if (Platform.OS === 'ios') {
@@ -154,8 +170,6 @@ export async function openNotificationSettings(): Promise<void> {
   }
 }
 
-// ─── Scheduling ───────────────────────────────────────────────────────────────
-
 export type ReminderLike = {
   id: number;
   title: string;
@@ -166,128 +180,177 @@ export type ReminderLike = {
 
 export async function cancelReminderNotification(reminderId: number): Promise<void> {
   if (Platform.OS === 'web') return;
-  try {
-    await Notifications.cancelScheduledNotificationAsync(notificationId(reminderId));
-  } catch {
-    // may not exist
-  }
+  const count = Math.floor(RING_BURST_SECONDS / RING_INTERVAL_SECONDS) + 1;
+  await Promise.all(
+    Array.from({ length: count }, (_, i) =>
+      Notifications.cancelScheduledNotificationAsync(notificationId(reminderId, i)).catch(
+        () => undefined,
+      ),
+    ),
+  );
+  await stopAlarmPlayer();
+}
+
+function alarmContent(reminder: ReminderLike, burstIndex: number) {
+  const body = reminder.description?.trim()
+    ? `${reminder.title}\n${reminder.description.trim()}`
+    : reminder.title;
+
+  // Prefer custom sound; fall back to default if not in build
+  const soundName = Platform.OS === 'ios' ? 'alarm.wav' : 'alarm.wav';
+
+  return {
+    title: burstIndex === 0 ? '⏰ ALARM' : '⏰ Still ringing…',
+    body,
+    subtitle: 'Mr. Chris DevHub',
+    sound: soundName as 'default' | string,
+    priority: Notifications.AndroidNotificationPriority.MAX,
+    ...(Platform.OS === 'ios' ? { interruptionLevel: 'timeSensitive' as const } : {}),
+    vibrate: [0, 600, 200, 600, 200, 800] as number[],
+    sticky: false,
+    autoDismiss: false,
+    badge: 1,
+    data: {
+      screen: 'reminders',
+      reminderId: reminder.id,
+      burstIndex,
+    },
+    ...(Platform.OS === 'android'
+      ? {
+          channelId: ALARM_CHANNEL_ID,
+          color: '#f59e0b',
+        }
+      : {}),
+  };
 }
 
 /**
- * Schedule (or reschedule) a local OS notification for one reminder.
- *
- * Fires with sound + vibration even when the app is closed, because the
- * OS owns the schedule after this call returns.
+ * Schedule a ring-storm: primary alarm at due time, then follow-ups every
+ * few seconds so the phone keeps alerting like a snooze-less alarm clock.
  */
 export async function scheduleReminderNotification(reminder: ReminderLike): Promise<boolean> {
   if (Platform.OS === 'web') return false;
 
-  const id = notificationId(reminder.id);
-
-  try {
-    await Notifications.cancelScheduledNotificationAsync(id);
-  } catch {
-    // fine
-  }
+  await cancelReminderNotification(reminder.id);
 
   if (reminder.done) return false;
 
   const dueDate = new Date(reminder.dueAt);
   if (Number.isNaN(dueDate.getTime())) return false;
+  if (dueDate.getTime() <= Date.now() + 500) return false;
 
-  // Allow near-future (e.g. "in 15s" tests). Skip only if already past.
-  if (dueDate.getTime() <= Date.now() + 1_000) return false;
+  const burstCount = Math.floor(RING_BURST_SECONDS / RING_INTERVAL_SECONDS) + 1;
+  let scheduled = 0;
 
-  const body = reminder.description?.trim()
-    ? `${reminder.title}\n${reminder.description.trim()}`
-    : reminder.title;
+  for (let i = 0; i < burstCount; i++) {
+    const when = new Date(dueDate.getTime() + i * RING_INTERVAL_SECONDS * 1000);
+    if (when.getTime() <= Date.now() + 500) continue;
 
-  try {
-    await Notifications.scheduleNotificationAsync({
-      identifier: id,
-      content: {
-        title: '⏰ Reminder alarm',
-        body,
-        subtitle: 'Mr. Chris DevHub',
-        sound: 'default',
-        priority: Notifications.AndroidNotificationPriority.MAX,
-        // iOS 15+: treat as time-sensitive so it can break through Focus
-        ...(Platform.OS === 'ios'
-          ? { interruptionLevel: 'timeSensitive' as const }
-          : {}),
-        vibrate: [0, 500, 250, 500, 250, 500, 250, 800],
-        sticky: false,
-        autoDismiss: false,
-        badge: 1,
-        data: {
-          screen: 'reminders',
-          reminderId: reminder.id,
+    try {
+      await Notifications.scheduleNotificationAsync({
+        identifier: notificationId(reminder.id, i),
+        content: alarmContent(reminder, i),
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: when,
+          ...(Platform.OS === 'android' ? { channelId: ALARM_CHANNEL_ID } : {}),
         },
-        ...(Platform.OS === 'android'
-          ? {
-              channelId: ALARM_CHANNEL_ID,
-              // Full-screen-style high priority on lock screen
-              color: '#f59e0b',
-            }
-          : {}),
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: dueDate,
-        ...(Platform.OS === 'android' ? { channelId: ALARM_CHANNEL_ID } : {}),
-      },
-    });
-    return true;
-  } catch (err) {
-    if (__DEV__) console.warn('[notifications] scheduleNotificationAsync failed:', err);
-    return false;
+      });
+      scheduled += 1;
+    } catch (err) {
+      // Retry once with default sound if custom sound failed
+      try {
+        await Notifications.scheduleNotificationAsync({
+          identifier: notificationId(reminder.id, i),
+          content: {
+            ...alarmContent(reminder, i),
+            sound: 'default',
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: when,
+            ...(Platform.OS === 'android' ? { channelId: ALARM_CHANNEL_ID } : {}),
+          },
+        });
+        scheduled += 1;
+      } catch (err2) {
+        if (__DEV__) console.warn('[notifications] schedule failed', err2 ?? err);
+      }
+    }
   }
+
+  return scheduled > 0;
 }
 
-/**
- * Fire a short test alarm in `seconds` (default 10) so the user can verify
- * sound + vibration with the app backgrounded.
- */
 export async function scheduleTestAlarm(seconds = 10): Promise<boolean> {
   if (Platform.OS === 'web') return false;
   const ready = await ensureAlarmReady();
   if (!ready) return false;
 
-  const when = new Date(Date.now() + Math.max(3, seconds) * 1000);
-  try {
-    await Notifications.scheduleNotificationAsync({
-      identifier: 'devhub-test-alarm',
-      content: {
-        title: '⏰ Test alarm',
-        body: 'If you hear sound and feel vibration, reminder alarms are working — even with the app closed.',
-        sound: 'default',
-        priority: Notifications.AndroidNotificationPriority.MAX,
-        ...(Platform.OS === 'ios'
-          ? { interruptionLevel: 'timeSensitive' as const }
-          : {}),
-        vibrate: [0, 500, 250, 500, 250, 500, 250, 800],
-        ...(Platform.OS === 'android' ? { channelId: ALARM_CHANNEL_ID, color: '#f59e0b' } : {}),
-        data: { screen: 'reminders', test: true },
-      },
-      trigger: {
-        type: Notifications.SchedulableTriggerInputTypes.DATE,
-        date: when,
-        ...(Platform.OS === 'android' ? { channelId: ALARM_CHANNEL_ID } : {}),
-      },
-    });
-    return true;
-  } catch (err) {
-    if (__DEV__) console.warn('[notifications] test alarm failed:', err);
-    return false;
+  // Cancel previous test burst
+  for (let i = 0; i < 8; i++) {
+    await Notifications.cancelScheduledNotificationAsync(`devhub-test-alarm-${i}`).catch(
+      () => undefined,
+    );
   }
+
+  const base = Date.now() + Math.max(5, seconds) * 1000;
+  let ok = 0;
+  for (let i = 0; i < 8; i++) {
+    const when = new Date(base + i * RING_INTERVAL_SECONDS * 1000);
+    try {
+      await Notifications.scheduleNotificationAsync({
+        identifier: `devhub-test-alarm-${i}`,
+        content: {
+          title: i === 0 ? '⏰ TEST ALARM' : '⏰ Test still ringing…',
+          body: 'Lock your phone — you should hear sound and feel vibration. Open the app and dismiss.',
+          sound: 'alarm.wav',
+          priority: Notifications.AndroidNotificationPriority.MAX,
+          ...(Platform.OS === 'ios' ? { interruptionLevel: 'timeSensitive' as const } : {}),
+          vibrate: [0, 600, 200, 600, 200, 800],
+          ...(Platform.OS === 'android' ? { channelId: ALARM_CHANNEL_ID, color: '#f59e0b' } : {}),
+          data: { screen: 'reminders', test: true },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: when,
+          ...(Platform.OS === 'android' ? { channelId: ALARM_CHANNEL_ID } : {}),
+        },
+      });
+      ok += 1;
+    } catch {
+      try {
+        await Notifications.scheduleNotificationAsync({
+          identifier: `devhub-test-alarm-${i}`,
+          content: {
+            title: i === 0 ? '⏰ TEST ALARM' : '⏰ Test still ringing…',
+            body: 'Lock your phone — you should hear sound and feel vibration.',
+            sound: 'default',
+            priority: Notifications.AndroidNotificationPriority.MAX,
+            ...(Platform.OS === 'ios' ? { interruptionLevel: 'timeSensitive' as const } : {}),
+            vibrate: [0, 600, 200, 600, 200, 800],
+            ...(Platform.OS === 'android' ? { channelId: ALARM_CHANNEL_ID, color: '#f59e0b' } : {}),
+            data: { screen: 'reminders', test: true },
+          },
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: when,
+            ...(Platform.OS === 'android' ? { channelId: ALARM_CHANNEL_ID } : {}),
+          },
+        });
+        ok += 1;
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return ok > 0;
 }
 
-/**
- * Sync all reminders — schedules future pending ones and cancels past/done.
- * Safe to call on every list refresh / app foreground.
- */
 export async function syncReminderNotifications(reminders: ReminderLike[]): Promise<void> {
   if (Platform.OS === 'web') return;
   await ensureAlarmReady();
   await Promise.all(reminders.map(scheduleReminderNotification));
 }
+
+export { stopAlarmPlayer, startAlarmPlayer, isAlarmPlaying } from '@/lib/alarm-player';

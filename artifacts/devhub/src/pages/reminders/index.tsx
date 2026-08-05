@@ -41,6 +41,8 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   clearFired,
   notificationsSupported,
+  testAlarmClock,
+  unlockAlarmAudio,
 } from "@/lib/reminder-alarms";
 import { ShareButton } from "@/components/share-button";
 import { formatReminderShare } from "@/lib/share";
@@ -115,21 +117,29 @@ export default function Reminders() {
   // Alarm polling lives in <ReminderAlarmWatcher /> (App.tsx) so it works on every route.
 
   const requestNotifications = async () => {
+    // Unlock audio on the same user gesture so the alarm can ring later
+    await unlockAlarmAudio();
     if (!notificationsSupported()) {
-      toast.message("Browser notifications are not supported here.");
+      toast.message("Browser notifications are not supported here — in-app alarm still works.");
       return;
     }
     try {
       const permission = await Notification.requestPermission();
       setNotifPermission(permission);
       if (permission === "granted") {
-        toast.success("Browser notifications enabled");
+        toast.success("Notifications on — alarm will ring with sound until you dismiss");
       } else {
-        toast.message("Notifications blocked — in-app toasts will still work.");
+        toast.message("Notifications blocked — full-screen in-app alarm will still ring.");
       }
     } catch {
       toast.error("Could not request notification permission");
     }
+  };
+
+  const handleTestAlarm = async () => {
+    await unlockAlarmAudio();
+    toast.message("Starting test alarm…");
+    await testAlarmClock();
   };
 
   const handleCreate = (e: React.FormEvent) => {
@@ -144,6 +154,7 @@ export default function Reminders() {
       return;
     }
 
+    void unlockAlarmAudio();
     createReminder.mutate(
       {
         data: {
@@ -161,7 +172,7 @@ export default function Reminders() {
           // Allow this reminder to fire when its time comes
           clearFired(created.id);
           invalidate();
-          toast.success("Reminder set");
+          toast.success("Alarm set — it will ring until you dismiss");
           setViewing(created);
         },
         onError: (err) => {
@@ -370,33 +381,46 @@ export default function Reminders() {
           </p>
         </div>
         <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0">
-          {notifPermission !== "unsupported" && notifPermission !== "granted" && (
+          <div className="flex flex-wrap gap-2 justify-end">
             <Button
               type="button"
-              variant="outline"
+              variant="default"
               size="sm"
-              className="gap-2"
-              onClick={requestNotifications}
+              className="gap-2 bg-amber-500 hover:bg-amber-500/90 text-black"
+              onClick={handleTestAlarm}
             >
-              <Bell className="w-4 h-4" />
-              Enable sound &amp; notifications
+              <BellRing className="w-4 h-4" />
+              Test alarm now
             </Button>
-          )}
+            {notifPermission !== "unsupported" && notifPermission !== "granted" && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                onClick={requestNotifications}
+              >
+                <Bell className="w-4 h-4" />
+                Enable notifications
+              </Button>
+            )}
+          </div>
           {notifPermission === "granted" && (
             <Badge variant="secondary" className="self-start sm:self-end gap-1.5 font-normal">
               <Bell className="w-3.5 h-3.5 text-emerald-500" />
-              Browser alerts on (sound + vibrate when open)
+              Alarm clock armed (rings until dismiss)
             </Badge>
           )}
           {notifPermission === "unsupported" && (
             <Badge variant="outline" className="self-start sm:self-end gap-1.5 font-normal">
               <BellOff className="w-3.5 h-3.5" />
-              Toast + sound in this tab
+              In-tab alarm clock
             </Badge>
           )}
-          <p className="text-[11px] text-muted-foreground max-w-[16rem] sm:text-right leading-snug">
-            For phone ring + vibrate when the app is <strong>closed</strong>, use the{" "}
-            <strong>DevHub mobile app</strong> and allow Alarms / Notifications.
+          <p className="text-[11px] text-muted-foreground max-w-[18rem] sm:text-right leading-snug">
+            On Mac: leave this tab open (or in background). The alarm rings full-screen with
+            continuous sound until you press <strong>Dismiss</strong>. On iPhone closed-app
+            ringing uses the <strong>mobile app</strong> with notification permission.
           </p>
         </div>
       </div>

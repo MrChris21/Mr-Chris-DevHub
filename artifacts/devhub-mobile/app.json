@@ -49,10 +49,11 @@
         {
           "color": "#f59e0b",
           "defaultChannel": "devhub-alarms",
-          "sounds": [],
+          "sounds": ["./assets/sounds/alarm.wav"],
           "mode": "production"
         }
-      ]
+      ],
+      "expo-av"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -17,8 +17,10 @@ import * as SplashScreen from 'expo-splash-screen';
 import * as Notifications from 'expo-notifications';
 import { setBaseUrl } from '@workspace/api-client-react';
 import {
+  attachAlarmResponseListener,
   configureNotificationHandler,
   ensureAlarmReady,
+  startAlarmPlayer,
 } from '@/lib/notifications';
 
 // ─── Module-level setup ───────────────────────────────────────────────────────
@@ -63,10 +65,15 @@ function NotificationHandler() {
   useEffect(() => {
     if (Platform.OS === 'web') return;
 
+    // Start looping alarm sound when notifications arrive / are tapped.
+    const alarmSub = attachAlarmResponseListener();
+
     // Handle a notification tap that launches (or re-opens) the app.
     const handleLastResponse = async () => {
       const response = await Notifications.getLastNotificationResponseAsync();
       if (response?.notification.request.content.data?.screen === 'reminders') {
+        // Keep ringing until user dismisses on the Reminders screen
+        void startAlarmPlayer();
         router.navigate('/(tabs)/reminders');
       }
     };
@@ -75,11 +82,15 @@ function NotificationHandler() {
     // Handle a notification tap while the app is already running.
     const sub = Notifications.addNotificationResponseReceivedListener(response => {
       if (response.notification.request.content.data?.screen === 'reminders') {
+        void startAlarmPlayer();
         router.navigate('/(tabs)/reminders');
       }
     });
 
-    return () => sub.remove();
+    return () => {
+      alarmSub.remove();
+      sub.remove();
+    };
   }, [router]);
 
   return null;

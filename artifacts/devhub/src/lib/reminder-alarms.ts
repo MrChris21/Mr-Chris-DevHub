@@ -1,16 +1,58 @@
+/**
+ * Alarm-clock style reminder system for the web app (Mac / Safari / Chrome).
+ *
+ * - Exact timers per reminder (not just a coarse poll)
+ * - Full-screen ringing UI until the user dismisses
+ * - Looping alarm sound + vibration until dismiss
+ * - Browser notifications when permission is granted
+ * - AudioContext unlocked after first user gesture (required by browsers)
+ */
+
 import { toast } from "sonner";
 
-// Bumped when the in-app toaster was fixed so reminders that were
-// silently "fired" (toast never rendered) can alert once more.
-const FIRED_KEY = "fired_reminders_v2";
+const DISMISSED_KEY = "dismissed_reminders_v3";
+const AUDIO_UNLOCK_KEY = "devhub_audio_unlocked";
+
+export type RingingAlarm = {
+  id: number;
+  title: string;
+  description?: string | null;
+  dueAt: string;
+  startedAt: number;
+};
+
+type Listener = () => void;
+
+let ringing: RingingAlarm | null = null;
+const listeners = new Set<Listener>();
+
+let audioCtx: AudioContext | null = null;
+let audioUnlocked = false;
+let loopNodes: Array<AudioNode | OscillatorNode | GainNode> = [];
+let loopTimer: number | null = null;
+let vibrateTimer: number | null = null;
+let htmlAudio: HTMLAudioElement | null = null;
+
+function notify() {
+  for (const l of listeners) l();
+}
+
+export function subscribeAlarm(listener: Listener): () => void {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+}
+
+export function getRingingAlarm(): RingingAlarm | null {
+  return ringing;
+}
 
 export function notificationsSupported(): boolean {
   return typeof window !== "undefined" && "Notification" in window;
 }
 
-export function getFiredIds(): number[] {
+export function getDismissedIds(): number[] {
   try {
-    const raw = localStorage.getItem(FIRED_KEY);
+    const raw = localStorage.getItem(DISMISSED_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed.filter((x) => typeof x === "number") : [];
@@ -19,124 +61,216 @@ export function getFiredIds(): number[] {
   }
 }
 
-export function markFired(id: number) {
+export function markDismissed(id: number) {
   try {
-    const fired = new Set(getFiredIds());
-    fired.add(id);
-    localStorage.setItem(FIRED_KEY, JSON.stringify([...fired]));
-  } catch {
-    // ignore storage failures (private mode, etc.)
-  }
-}
-
-export function clearFired(id: number) {
-  try {
-    const fired = getFiredIds().filter((x) => x !== id);
-    localStorage.setItem(FIRED_KEY, JSON.stringify(fired));
+    const set = new Set(getDismissedIds());
+    set.add(id);
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify([...set]));
   } catch {
     // ignore
   }
 }
 
-/** Phone vibration when supported (mobile browsers / some desktops). */
-function vibrateAlarm() {
+export function clearDismissed(id: number) {
   try {
-    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
-      // Alarm-like pulse pattern (ms)
-      navigator.vibrate([400, 150, 400, 150, 400, 150, 600, 200, 400]);
+    const next = getDismissedIds().filter((x) => x !== id);
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+}
+
+/** Back-compat aliases used by the reminders page */
+export const clearFired = clearDismissed;
+export const markFired = markDismissed;
+export const getFiredIds = getDismissedIds;
+
+// ─── Audio unlock (browsers block autoplay until a gesture) ───────────────────
+
+function getAudioContext(): AudioContext | null {
+  if (typeof window === "undefined") return null;
+  const Ctor =
+    window.AudioContext ||
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctor) return null;
+  if (!audioCtx) audioCtx = new Ctor();
+  return audioCtx;
+}
+
+/** Call from any user click so later alarms can ring without a gesture. */
+export async function unlockAlarmAudio(): Promise<void> {
+  try {
+    const ctx = getAudioContext();
+    if (ctx && ctx.state === "suspended") {
+      await ctx.resume();
+    }
+    // Prime HTMLAudio as well (Safari likes this)
+    if (!htmlAudio) {
+      htmlAudio = new Audio("/sounds/alarm.wav");
+      htmlAudio.loop = true;
+      htmlAudio.preload = "auto";
+      htmlAudio.volume = 1;
+    }
+    // Play silent blip then pause to unlock
+    htmlAudio.currentTime = 0;
+    const p = htmlAudio.play();
+    if (p) {
+      await p.catch(() => undefined);
+      htmlAudio.pause();
+      htmlAudio.currentTime = 0;
+    }
+    audioUnlocked = true;
+    try {
+      sessionStorage.setItem(AUDIO_UNLOCK_KEY, "1");
+    } catch {
+      // ignore
     }
   } catch {
     // ignore
   }
 }
 
-/** Play a short multi-beep alarm through Web Audio (no external file). */
-function playAlarmSound() {
+export function isAudioUnlocked(): boolean {
+  if (audioUnlocked) return true;
   try {
-    const AudioCtx =
-      window.AudioContext ||
-      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
-
-    const ctx = new AudioCtx();
-    const now = ctx.currentTime;
-
-    const beeps = [
-      { t: 0, f: 880 },
-      { t: 0.22, f: 988 },
-      { t: 0.44, f: 880 },
-      { t: 0.66, f: 1175 },
-      { t: 1.0, f: 880 },
-      { t: 1.22, f: 988 },
-      { t: 1.44, f: 1319 },
-    ];
-
-    for (const { t, f } of beeps) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "square";
-      osc.frequency.value = f;
-      gain.gain.setValueAtTime(0.0001, now + t);
-      gain.gain.exponentialRampToValueAtTime(0.18, now + t + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.16);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(now + t);
-      osc.stop(now + t + 0.18);
-    }
-
-    // Close after sequence finishes to free resources.
-    window.setTimeout(() => {
-      void ctx.close();
-    }, 2200);
+    return sessionStorage.getItem(AUDIO_UNLOCK_KEY) === "1";
   } catch {
-    // Autoplay may be blocked until a user gesture; toast still shows.
+    return false;
   }
 }
 
-/**
- * In-app toast + vibration + alarm sound + browser notification when allowed.
- * Requires the Sonner <Toaster /> to be mounted (see App.tsx).
- *
- * Note: true closed-tab / phone-off alarms need the DevHub mobile app
- * (OS-scheduled local notifications). Browser pages cannot reliably ring
- * after the tab is fully closed without a native app or push service.
- */
-export function fireAlarm(title: string, description?: string | null) {
-  toast("⏰ Reminder alarm!", {
-    description: description?.trim() ? `${title} — ${description}` : title,
-    duration: 15_000,
+// ─── Sound + vibration loop ───────────────────────────────────────────────────
+
+function stopSoundAndVibrate() {
+  if (loopTimer != null) {
+    window.clearInterval(loopTimer);
+    loopTimer = null;
+  }
+  if (vibrateTimer != null) {
+    window.clearInterval(vibrateTimer);
+    vibrateTimer = null;
+  }
+  try {
+    if (typeof navigator !== "undefined" && navigator.vibrate) navigator.vibrate(0);
+  } catch {
+    // ignore
+  }
+  for (const n of loopNodes) {
+    try {
+      // OscillatorNode
+      if ("stop" in n && typeof (n as OscillatorNode).stop === "function") {
+        (n as OscillatorNode).stop();
+      }
+      n.disconnect();
+    } catch {
+      // ignore
+    }
+  }
+  loopNodes = [];
+  if (htmlAudio) {
+    try {
+      htmlAudio.pause();
+      htmlAudio.currentTime = 0;
+    } catch {
+      // ignore
+    }
+  }
+}
+
+function startVibrateLoop() {
+  const pulse = () => {
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        navigator.vibrate([500, 200, 500, 200, 500, 400]);
+      }
+    } catch {
+      // ignore
+    }
+  };
+  pulse();
+  vibrateTimer = window.setInterval(pulse, 1600);
+}
+
+function startWebAudioLoop() {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+
+  const master = ctx.createGain();
+  master.gain.value = 0.22;
+  master.connect(ctx.destination);
+  loopNodes.push(master);
+
+  // Two alternating alarm tones
+  const freqs = [880, 1175];
+  freqs.forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = "square";
+    osc.frequency.value = freq;
+    // LFO pulse
+    const lfo = ctx.createOscillator();
+    const lfoGain = ctx.createGain();
+    lfo.frequency.value = 3 + i;
+    lfoGain.gain.value = 0.15;
+    lfo.connect(lfoGain);
+    lfoGain.connect(g.gain);
+    g.gain.value = 0.08;
+    osc.connect(g);
+    g.connect(master);
+    osc.start();
+    lfo.start();
+    loopNodes.push(osc, g, lfo, lfoGain);
   });
 
-  vibrateAlarm();
-  playAlarmSound();
-
-  if (!notificationsSupported()) return;
-  try {
-    if (Notification.permission === "granted") {
-      const n = new Notification("⏰ Mr. Chris DevHub", {
-        body: description?.trim() ? `${title}\n${description}` : title,
-        icon: "/icon-192.png",
-        badge: "/icon-192.png",
-        tag: `reminder-alarm-${title}`,
-        requireInteraction: true,
-        silent: false,
-        // Chromium mobile: vibration pattern for the system notification
-        // @ts-expect-error vibrate is non-standard but widely supported on Android Chrome
-        vibrate: [400, 150, 400, 150, 400, 150, 600],
-      });
-      // Some browsers auto-close; keep it until user interacts if possible.
-      n.onclick = () => {
-        window.focus();
-        n.close();
-      };
+  // Also tick a siren warble every few seconds via gain bump
+  loopTimer = window.setInterval(() => {
+    try {
+      const t = ctx.currentTime;
+      master.gain.cancelScheduledValues(t);
+      master.gain.setValueAtTime(0.22, t);
+      master.gain.linearRampToValueAtTime(0.35, t + 0.08);
+      master.gain.linearRampToValueAtTime(0.18, t + 0.35);
+    } catch {
+      // ignore
     }
+  }, 900);
+}
+
+async function startHtmlAudioLoop() {
+  try {
+    if (!htmlAudio) {
+      htmlAudio = new Audio("/sounds/alarm.wav");
+      htmlAudio.loop = true;
+      htmlAudio.volume = 1;
+    }
+    htmlAudio.currentTime = 0;
+    await htmlAudio.play();
   } catch {
-    // Browser notification is best-effort; toast + sound already shown
+    // fall through to web audio
   }
 }
 
-type ReminderLike = {
+async function startSoundAndVibrate() {
+  stopSoundAndVibrate();
+  startVibrateLoop();
+  try {
+    const ctx = getAudioContext();
+    if (ctx?.state === "suspended") await ctx.resume();
+  } catch {
+    // ignore
+  }
+  await startHtmlAudioLoop();
+  // Web Audio as backup / layer
+  try {
+    startWebAudioLoop();
+  } catch {
+    // ignore
+  }
+}
+
+// ─── Public alarm API ─────────────────────────────────────────────────────────
+
+export type ReminderLike = {
   id: number;
   title: string;
   description?: string | null;
@@ -144,25 +278,150 @@ type ReminderLike = {
   done: boolean;
 };
 
-/** Check pending reminders and fire any that are due and not yet fired. */
-export function checkReminderAlarms(reminders: ReminderLike[] | undefined | null) {
-  if (!reminders?.length) return;
+/**
+ * Start a persistent alarm-clock ring for a reminder.
+ * Keeps sounding + vibrating until dismissAlarm() is called.
+ */
+export async function startAlarmRinging(reminder: ReminderLike): Promise<void> {
+  if (typeof window === "undefined") return;
+  if (reminder.done) return;
+  if (getDismissedIds().includes(reminder.id)) return;
 
+  // Already ringing this one
+  if (ringing?.id === reminder.id) return;
+
+  // Switch to new alarm if another is ringing
+  if (ringing) {
+    stopSoundAndVibrate();
+  }
+
+  ringing = {
+    id: reminder.id,
+    title: reminder.title,
+    description: reminder.description,
+    dueAt: reminder.dueAt,
+    startedAt: Date.now(),
+  };
+  notify();
+
+  toast("⏰ ALARM", {
+    description: reminder.description?.trim()
+      ? `${reminder.title} — ${reminder.description}`
+      : reminder.title,
+    duration: Infinity,
+    id: `alarm-${reminder.id}`,
+  });
+
+  await startSoundAndVibrate();
+
+  // System notification (Mac Notification Center / iOS Safari when available)
+  if (notificationsSupported() && Notification.permission === "granted") {
+    try {
+      const n = new Notification("⏰ Alarm — Mr. Chris DevHub", {
+        body: reminder.description?.trim()
+          ? `${reminder.title}\n${reminder.description}`
+          : reminder.title,
+        icon: "/icon-192.png",
+        badge: "/icon-192.png",
+        tag: `devhub-alarm-${reminder.id}`,
+        requireInteraction: true,
+        silent: false, // let OS play notification sound too
+      });
+      n.onclick = () => {
+        window.focus();
+        n.close();
+      };
+    } catch {
+      // ignore
+    }
+  }
+
+  // Try to keep screen awake while ringing
+  try {
+    const nav = navigator as Navigator & {
+      wakeLock?: { request: (type: "screen") => Promise<WakeLockSentinel> };
+    };
+    if (nav.wakeLock) {
+      void nav.wakeLock.request("screen").catch(() => undefined);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+/** Stop sound/vibration and mark the reminder as dismissed. */
+export function dismissAlarm(id?: number): void {
+  const targetId = id ?? ringing?.id;
+  if (targetId != null) {
+    markDismissed(targetId);
+    try {
+      toast.dismiss(`alarm-${targetId}`);
+    } catch {
+      // ignore
+    }
+  }
+  stopSoundAndVibrate();
+  ringing = null;
+  notify();
+}
+
+/**
+ * Scan reminders and start ringing any that are due and not dismissed.
+ * Returns how many newly started.
+ */
+export function checkReminderAlarms(reminders: ReminderLike[] | undefined | null): number {
+  if (!reminders?.length) return 0;
+  let started = 0;
   try {
     const now = Date.now();
-    const fired = new Set(getFiredIds());
+    const dismissed = new Set(getDismissedIds());
 
-    for (const r of reminders) {
-      if (r.done) continue;
-      const due = new Date(r.dueAt).getTime();
-      if (Number.isNaN(due) || due > now) continue;
-      if (fired.has(r.id)) continue;
+    // Prefer the earliest due pending reminder for the active ring
+    const due = reminders
+      .filter((r) => !r.done && !dismissed.has(r.id))
+      .map((r) => ({ r, due: new Date(r.dueAt).getTime() }))
+      .filter(({ due }) => !Number.isNaN(due) && due <= now)
+      .sort((a, b) => a.due - b.due);
 
-      fireAlarm(r.title, r.description);
-      markFired(r.id);
-      fired.add(r.id);
+    if (due.length === 0) return 0;
+
+    // If already ringing a still-due alarm, keep it
+    if (ringing && due.some(({ r }) => r.id === ringing!.id)) {
+      return 0;
     }
+
+    const next = due[0].r;
+    void startAlarmRinging(next);
+    started = 1;
   } catch (err) {
     console.error("Reminder alarm check failed:", err);
   }
+  return started;
+}
+
+/** Fire a 15s live test of the full alarm-clock UI + sound. */
+export async function testAlarmClock(): Promise<void> {
+  await unlockAlarmAudio();
+  await startAlarmRinging({
+    id: -1,
+    title: "Test alarm",
+    description: "If you hear continuous sound, the alarm clock is working. Tap Dismiss.",
+    dueAt: new Date().toISOString(),
+    done: false,
+  });
+  // Auto-stop test after 45s so it doesn't run forever if user walks away
+  window.setTimeout(() => {
+    if (ringing?.id === -1) dismissAlarm(-1);
+  }, 45_000);
+}
+
+// Legacy name used by older call sites
+export function fireAlarm(title: string, description?: string | null) {
+  void startAlarmRinging({
+    id: -Date.now(),
+    title,
+    description,
+    dueAt: new Date().toISOString(),
+    done: false,
+  });
 }
