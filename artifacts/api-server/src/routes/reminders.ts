@@ -60,7 +60,14 @@ router.patch("/reminders/:id", async (req, res): Promise<void> => {
     return;
   }
   const updateData: Record<string, unknown> = { ...parsed.data, updatedAt: new Date() };
-  if (parsed.data.dueAt) updateData.dueAt = new Date(parsed.data.dueAt);
+  if (Object.prototype.hasOwnProperty.call(parsed.data, "dueAt") && parsed.data.dueAt) {
+    updateData.dueAt = new Date(parsed.data.dueAt);
+  }
+  if (Object.prototype.hasOwnProperty.call(parsed.data, "description")) {
+    updateData.description = parsed.data.description?.trim()
+      ? parsed.data.description
+      : null;
+  }
   const [row] = await db.update(remindersTable).set(updateData).where(eq(remindersTable.id, params.data.id)).returning();
   if (!row) {
     res.status(404).json({ error: "Reminder not found" });
