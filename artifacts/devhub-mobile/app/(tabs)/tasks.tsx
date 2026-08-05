@@ -35,10 +35,28 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 type Status = 'todo' | 'in_progress' | 'done';
 type Priority = 'low' | 'medium' | 'high';
 
-const STATUS_META: Record<Status, { label: string; color: string; iconName: keyof typeof Feather.glyphMap }> = {
-  todo: { label: 'To Do', color: '#94a3b8', iconName: 'circle' },
-  in_progress: { label: 'In Progress', color: '#f59e0b', iconName: 'clock' },
-  done: { label: 'Done', color: '#10b981', iconName: 'check-circle' },
+const STATUS_META: Record<
+  Status,
+  { label: string; color: string; iconName: keyof typeof Feather.glyphMap; gif: number }
+> = {
+  todo: {
+    label: 'To Do',
+    color: '#94a3b8',
+    iconName: 'circle',
+    gif: require('../../assets/images/to-do-list.gif'),
+  },
+  in_progress: {
+    label: 'In Progress',
+    color: '#f59e0b',
+    iconName: 'clock',
+    gif: require('../../assets/images/workspace.gif'),
+  },
+  done: {
+    label: 'Done',
+    color: '#10b981',
+    iconName: 'check-circle',
+    gif: require('../../assets/images/like.gif'),
+  },
 };
 
 const PRIORITY_COLORS: Record<Priority, string> = {
@@ -66,6 +84,7 @@ function TaskCard({
   const pc = priorityColor(task.priority);
   const isDone = task.status === 'done';
   const isInProgress = task.status === 'in_progress';
+  const gifStyle = isInProgress ? styles.statusGifLarge : styles.statusGif;
 
   const handleToggle = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -85,15 +104,7 @@ function TaskCard({
     >
       <View style={styles.cardTop}>
         <TouchableOpacity onPress={handleToggle} hitSlop={12} style={styles.statusIconBtn}>
-          {isInProgress ? (
-            <Image
-              source={require('../../assets/images/workspace.gif')}
-              style={styles.workingGif}
-              resizeMode="contain"
-            />
-          ) : (
-            <Feather name={status.iconName} size={18} color={status.color} />
-          )}
+          <Image source={status.gif} style={gifStyle} resizeMode="contain" />
         </TouchableOpacity>
         <Text
           style={[
@@ -144,25 +155,17 @@ function SectionHeaderComp({
   title,
   count,
   color,
-  showWorkingGif,
+  gif,
 }: {
   title: string;
   count: number;
   color: string;
-  showWorkingGif?: boolean;
+  gif: number;
 }) {
   const colors = useColors();
   return (
     <View style={[styles.sectionHeader, { backgroundColor: colors.background }]}>
-      {showWorkingGif ? (
-        <Image
-          source={require('../../assets/images/workspace.gif')}
-          style={styles.sectionWorkingGif}
-          resizeMode="contain"
-        />
-      ) : (
-        <View style={[styles.sectionDot, { backgroundColor: color }]} />
-      )}
+      <Image source={gif} style={styles.sectionStatusGif} resizeMode="contain" />
       <Text style={[styles.sectionTitle, { color: colors.mutedForeground }]}>{title}</Text>
       <View style={[styles.sectionBadge, { backgroundColor: color + '22' }]}>
         <Text style={[styles.sectionCount, { color }]}>{count}</Text>
@@ -546,7 +549,7 @@ export default function TasksScreen() {
                 title={meta.label}
                 count={section.data.length}
                 color={meta.color}
-                showWorkingGif={section.key === 'in_progress'}
+                gif={meta.gif}
               />
             );
           }}
@@ -605,8 +608,9 @@ const styles = StyleSheet.create({
   card: { borderRadius: 12, borderWidth: 1, padding: 14, marginBottom: 8, gap: 8 },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   statusIconBtn: { marginTop: 1 },
-  workingGif: { width: 28, height: 28 },
-  sectionWorkingGif: { width: 18, height: 18 },
+  statusGif: { width: 40, height: 40 },
+  statusGifLarge: { width: 56, height: 56 },
+  sectionStatusGif: { width: 28, height: 28 },
   taskTitle: { flex: 1, fontSize: 14, fontWeight: '500', lineHeight: 20 },
   taskTitleDone: { textDecorationLine: 'line-through' },
   description: { fontSize: 13, lineHeight: 18, marginLeft: 28 },

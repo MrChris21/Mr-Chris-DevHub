@@ -48,6 +48,45 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ShareButton } from "@/components/share-button";
 import { formatTaskShare } from "@/lib/share";
 
+/** Looping status gifs (from Photos/) — always shown for each status. */
+const STATUS_GIF: Record<TaskStatus, { src: string; alt: string }> = {
+  todo: { src: "to-do-list.gif", alt: "To do" },
+  in_progress: { src: "workspace.gif", alt: "Working" },
+  done: { src: "like.gif", alt: "Done" },
+};
+
+function statusGifUrl(status: TaskStatus) {
+  const file = STATUS_GIF[status]?.src ?? STATUS_GIF.todo.src;
+  return `${import.meta.env.BASE_URL}${file}`;
+}
+
+function StatusGif({
+  status,
+  size = "md",
+  className = "",
+}: {
+  status: TaskStatus;
+  size?: "sm" | "md" | "lg";
+  className?: string;
+}) {
+  const meta = STATUS_GIF[status] ?? STATUS_GIF.todo;
+  const sizeClass =
+    size === "lg"
+      ? "w-14 h-14 sm:w-16 sm:h-16"
+      : size === "sm"
+        ? "w-6 h-6"
+        : "w-12 h-12 sm:w-14 sm:h-14";
+  return (
+    <img
+      src={statusGifUrl(status)}
+      alt={meta.alt}
+      title={meta.alt}
+      className={`${sizeClass} object-contain shrink-0 select-none ${className}`}
+      draggable={false}
+    />
+  );
+}
+
 function toDatetimeLocalValue(iso: string | null | undefined): string {
   if (!iso) return "";
   const d = new Date(iso);
@@ -237,20 +276,9 @@ export default function TasksBoard() {
     tasks?.filter((t) => (filterPriority === "all" ? true : t.priority === filterPriority)) || [];
 
   const columns: { id: TaskStatus; label: string; icon: React.ReactNode }[] = [
-    { id: "todo", label: "To Do", icon: <Circle className="w-4 h-4 text-muted-foreground" /> },
-    {
-      id: "in_progress",
-      label: "In Progress",
-      icon: (
-        <img
-          src={`${import.meta.env.BASE_URL}workspace.gif`}
-          alt="Working"
-          className="w-5 h-5 object-contain"
-          draggable={false}
-        />
-      ),
-    },
-    { id: "done", label: "Done", icon: <CheckCircle2 className="w-4 h-4 text-emerald-500" /> },
+    { id: "todo", label: "To Do", icon: <StatusGif status="todo" size="sm" /> },
+    { id: "in_progress", label: "In Progress", icon: <StatusGif status="in_progress" size="sm" /> },
+    { id: "done", label: "Done", icon: <StatusGif status="done" size="sm" /> },
   ];
 
   const getPriorityColor = (priority: TaskPriority) => {
@@ -281,16 +309,12 @@ export default function TasksBoard() {
           onClick={() => setViewingTask(task)}
         >
           <CardContent className="p-4 flex flex-col gap-3">
-            <div className="flex items-start gap-2">
-              {task.status === "in_progress" && (
-                <img
-                  src={`${import.meta.env.BASE_URL}workspace.gif`}
-                  alt="In progress — working"
-                  title="Working…"
-                  className="w-9 h-9 sm:w-10 sm:h-10 object-contain shrink-0 mt-0.5 select-none"
-                  draggable={false}
-                />
-              )}
+            <div className="flex items-start gap-2.5">
+              <StatusGif
+                status={task.status}
+                size={task.status === "in_progress" ? "lg" : "md"}
+                className="mt-0.5"
+              />
               <div className="flex-1 min-w-0 space-y-2">
                 <p
                   className={`text-sm font-semibold leading-snug break-words whitespace-pre-wrap ${
@@ -566,14 +590,10 @@ export default function TasksBoard() {
                     Status
                   </p>
                   <div className="flex items-center gap-2">
-                    {viewingTask.status === "in_progress" && (
-                      <img
-                        src={`${import.meta.env.BASE_URL}workspace.gif`}
-                        alt="Working"
-                        className="w-8 h-8 object-contain"
-                        draggable={false}
-                      />
-                    )}
+                    <StatusGif
+                      status={viewingTask.status}
+                      size={viewingTask.status === "in_progress" ? "lg" : "md"}
+                    />
                     <Badge variant="secondary" className="font-mono capitalize">
                       {viewingTask.status.replace("_", " ")}
                     </Badge>
