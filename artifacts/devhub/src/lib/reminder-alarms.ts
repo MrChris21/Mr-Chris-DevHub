@@ -38,27 +38,101 @@ export function clearFired(id: number) {
   }
 }
 
+/** Phone vibration when supported (mobile browsers / some desktops). */
+function vibrateAlarm() {
+  try {
+    if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+      // Alarm-like pulse pattern (ms)
+      navigator.vibrate([400, 150, 400, 150, 400, 150, 600, 200, 400]);
+    }
+  } catch {
+    // ignore
+  }
+}
+
+/** Play a short multi-beep alarm through Web Audio (no external file). */
+function playAlarmSound() {
+  try {
+    const AudioCtx =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+
+    const ctx = new AudioCtx();
+    const now = ctx.currentTime;
+
+    const beeps = [
+      { t: 0, f: 880 },
+      { t: 0.22, f: 988 },
+      { t: 0.44, f: 880 },
+      { t: 0.66, f: 1175 },
+      { t: 1.0, f: 880 },
+      { t: 1.22, f: 988 },
+      { t: 1.44, f: 1319 },
+    ];
+
+    for (const { t, f } of beeps) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.value = f;
+      gain.gain.setValueAtTime(0.0001, now + t);
+      gain.gain.exponentialRampToValueAtTime(0.18, now + t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + t + 0.16);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + t);
+      osc.stop(now + t + 0.18);
+    }
+
+    // Close after sequence finishes to free resources.
+    window.setTimeout(() => {
+      void ctx.close();
+    }, 2200);
+  } catch {
+    // Autoplay may be blocked until a user gesture; toast still shows.
+  }
+}
+
 /**
- * In-app toast + optional browser notification for a due reminder.
+ * In-app toast + vibration + alarm sound + browser notification when allowed.
  * Requires the Sonner <Toaster /> to be mounted (see App.tsx).
+ *
+ * Note: true closed-tab / phone-off alarms need the DevHub mobile app
+ * (OS-scheduled local notifications). Browser pages cannot reliably ring
+ * after the tab is fully closed without a native app or push service.
  */
 export function fireAlarm(title: string, description?: string | null) {
-  toast("Reminder!", {
+  toast("⏰ Reminder alarm!", {
     description: description?.trim() ? `${title} — ${description}` : title,
-    duration: 10_000,
+    duration: 15_000,
   });
+
+  vibrateAlarm();
+  playAlarmSound();
 
   if (!notificationsSupported()) return;
   try {
     if (Notification.permission === "granted") {
-      new Notification("Mr. Chris DevHub", {
+      const n = new Notification("⏰ Mr. Chris DevHub", {
         body: description?.trim() ? `${title}\n${description}` : title,
         icon: "/icon-192.png",
-        tag: `reminder-${title}`,
+        badge: "/icon-192.png",
+        tag: `reminder-alarm-${title}`,
+        requireInteraction: true,
+        silent: false,
+        // Chromium mobile: vibration pattern for the system notification
+        // @ts-expect-error vibrate is non-standard but widely supported on Android Chrome
+        vibrate: [400, 150, 400, 150, 400, 150, 600],
       });
+      // Some browsers auto-close; keep it until user interacts if possible.
+      n.onclick = () => {
+        window.focus();
+        n.close();
+      };
     }
   } catch {
-    // Browser notification is best-effort; toast already shown
+    // Browser notification is best-effort; toast + sound already shown
   }
 }
 

@@ -369,30 +369,36 @@ export default function Reminders() {
             Set a title, details, and time — we&apos;ll alert you when it&apos;s due.
           </p>
         </div>
-        {notifPermission !== "unsupported" && notifPermission !== "granted" && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0 gap-2"
-            onClick={requestNotifications}
-          >
-            <Bell className="w-4 h-4" />
-            Enable notifications
-          </Button>
-        )}
-        {notifPermission === "granted" && (
-          <Badge variant="secondary" className="self-start gap-1.5 font-normal">
-            <Bell className="w-3.5 h-3.5 text-emerald-500" />
-            Notifications on
-          </Badge>
-        )}
-        {notifPermission === "unsupported" && (
-          <Badge variant="outline" className="self-start gap-1.5 font-normal">
-            <BellOff className="w-3.5 h-3.5" />
-            In-app alerts only
-          </Badge>
-        )}
+        <div className="flex flex-col items-stretch sm:items-end gap-2 shrink-0">
+          {notifPermission !== "unsupported" && notifPermission !== "granted" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={requestNotifications}
+            >
+              <Bell className="w-4 h-4" />
+              Enable sound &amp; notifications
+            </Button>
+          )}
+          {notifPermission === "granted" && (
+            <Badge variant="secondary" className="self-start sm:self-end gap-1.5 font-normal">
+              <Bell className="w-3.5 h-3.5 text-emerald-500" />
+              Browser alerts on (sound + vibrate when open)
+            </Badge>
+          )}
+          {notifPermission === "unsupported" && (
+            <Badge variant="outline" className="self-start sm:self-end gap-1.5 font-normal">
+              <BellOff className="w-3.5 h-3.5" />
+              Toast + sound in this tab
+            </Badge>
+          )}
+          <p className="text-[11px] text-muted-foreground max-w-[16rem] sm:text-right leading-snug">
+            For phone ring + vibrate when the app is <strong>closed</strong>, use the{" "}
+            <strong>DevHub mobile app</strong> and allow Alarms / Notifications.
+          </p>
+        </div>
       </div>
 
       <Card className="bg-card/50 border-border/50">

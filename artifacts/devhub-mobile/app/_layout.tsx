@@ -18,8 +18,7 @@ import * as Notifications from 'expo-notifications';
 import { setBaseUrl } from '@workspace/api-client-react';
 import {
   configureNotificationHandler,
-  requestNotificationPermission,
-  setupAndroidChannel,
+  ensureAlarmReady,
 } from '@/lib/notifications';
 
 // ─── Module-level setup ───────────────────────────────────────────────────────
@@ -107,12 +106,9 @@ export default function RootLayout() {
     Inter_700Bold,
   });
 
-  // Request notification permission + Android channel before any reminder can schedule.
+  // Alarm channel + notification permission so closed-app rings work.
   useEffect(() => {
-    (async () => {
-      await setupAndroidChannel();
-      await requestNotificationPermission();
-    })();
+    ensureAlarmReady().catch(() => {});
   }, []);
 
   useEffect(() => {

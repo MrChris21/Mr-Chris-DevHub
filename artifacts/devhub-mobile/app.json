@@ -16,7 +16,8 @@
     "ios": {
       "supportsTablet": false,
       "infoPlist": {
-        "UIBackgroundModes": ["remote-notification"]
+        "UIBackgroundModes": ["remote-notification", "fetch"],
+        "NSUserNotificationsUsageDescription": "DevHub needs notifications to ring and vibrate when your reminders are due, even if the app is closed."
       }
     },
     "android": {
@@ -26,7 +27,9 @@
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.USE_EXACT_ALARM",
         "android.permission.VIBRATE",
-        "android.permission.RECEIVE_BOOT_COMPLETED"
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.WAKE_LOCK",
+        "android.permission.USE_FULL_SCREEN_INTENT"
       ]
     },
     "web": {
@@ -45,8 +48,9 @@
         "expo-notifications",
         {
           "color": "#f59e0b",
-          "defaultChannel": "devhub-reminders",
-          "sounds": []
+          "defaultChannel": "devhub-alarms",
+          "sounds": [],
+          "mode": "production"
         }
       ]
     ],

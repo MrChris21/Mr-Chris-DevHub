@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   Alert,
+  AppState,
   FlatList,
   KeyboardAvoidingView,
   Modal,
@@ -29,7 +30,15 @@ import {
 } from '@workspace/api-client-react';
 import type { Reminder } from '@workspace/api-client-react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { syncReminderNotifications } from '@/lib/notifications';
+import {
+  cancelReminderNotification,
+  ensureAlarmReady,
+  getNotificationPermissionStatus,
+  openNotificationSettings,
+  scheduleReminderNotification,
+  scheduleTestAlarm,
+  syncReminderNotifications,
+} from '@/lib/notifications';
 import { formatReminderShare, shareContent } from '@/lib/share';
 
 function formatDue(dateStr: string): { label: string; overdue: boolean; today: boolean } {
@@ -235,9 +244,30 @@ function ReminderEditorModal({
 
   const { mutate: createReminder, isPending: isCreating } = useCreateReminder({
     mutation: {
-      onSuccess: () => {
+      onSuccess: async created => {
+        // Schedule OS alarm immediately so it rings even if the app is closed.
+        await ensureAlarmReady();
+        const ok = await scheduleReminderNotification(created);
         queryClient.invalidateQueries({ queryKey: getListRemindersQueryKey() });
         resetAndClose();
+        if (ok) {
+          Alert.alert(
+            'Alarm set',
+            'This reminder will sound and vibrate at the due time — even if DevHub is closed.',
+          );
+        } else {
+          const due = new Date(created.dueAt).getTime();
+          if (due > Date.now() + 1000) {
+            Alert.alert(
+              'Permission needed',
+              'Allow notifications (and Alarms & reminders on Android) so the phone can ring when this is due.',
+              [
+                { text: 'Not now', style: 'cancel' },
+                { text: 'Open Settings', onPress: () => openNotificationSettings() },
+              ],
+            );
+          }
+        }
       },
       onError: () => {
         Alert.alert('Error', 'Failed to create reminder. Please try again.');
@@ -247,7 +277,13 @@ function ReminderEditorModal({
 
   const { mutate: updateReminder, isPending: isUpdating } = useUpdateReminder({
     mutation: {
-      onSuccess: () => {
+      onSuccess: async updated => {
+        await ensureAlarmReady();
+        if (updated.done) {
+          await cancelReminderNotification(updated.id);
+        } else {
+          await scheduleReminderNotification(updated);
+        }
         queryClient.invalidateQueries({ queryKey: getListRemindersQueryKey() });
         resetAndClose();
       },
@@ -259,7 +295,8 @@ function ReminderEditorModal({
 
   const { mutate: deleteReminder, isPending: isDeleting } = useDeleteReminder({
     mutation: {
-      onSuccess: () => {
+      onSuccess: async (_data, vars) => {
+        await cancelReminderNotification(vars.id);
         queryClient.invalidateQueries({ queryKey: getListRemindersQueryKey() });
         resetAndClose();
       },
@@ -560,16 +597,40 @@ export default function RemindersScreen() {
   const queryClient = useQueryClient();
   const { data: reminders, isLoading, refetch, isRefetching } = useListReminders();
   const [editorReminder, setEditorReminder] = React.useState<Reminder | null | undefined>(undefined);
+  const [alarmStatus, setAlarmStatus] = React.useState<
+    'granted' | 'denied' | 'undetermined' | 'unsupported'
+  >('undetermined');
 
   const topPadding = getHeaderTopPadding(insets.top);
   const { fabBottom, listPaddingBottom } = getTabBarLayout(insets.bottom);
   const modalVisible = editorReminder !== undefined;
+
+  const refreshAlarmStatus = React.useCallback(async () => {
+    const status = await getNotificationPermissionStatus();
+    setAlarmStatus(status);
+  }, []);
+
+  React.useEffect(() => {
+    ensureAlarmReady().then(ok => setAlarmStatus(ok ? 'granted' : 'denied')).catch(() => {});
+    refreshAlarmStatus();
+  }, [refreshAlarmStatus]);
 
   React.useEffect(() => {
     if (reminders) {
       syncReminderNotifications(reminders).catch(console.warn);
     }
   }, [reminders]);
+
+  // Re-sync alarms when returning to the app (e.g. after OS killed it).
+  React.useEffect(() => {
+    const sub = AppState.addEventListener('change', state => {
+      if (state === 'active') {
+        refreshAlarmStatus();
+        if (reminders) syncReminderNotifications(reminders).catch(console.warn);
+      }
+    });
+    return () => sub.remove();
+  }, [reminders, refreshAlarmStatus]);
 
   const { mutate: updateReminder } = useUpdateReminder({
     mutation: {
@@ -584,6 +645,13 @@ export default function RemindersScreen() {
       onError: (_err, _vars, context: { prev?: Reminder[] } | undefined) => {
         if (context?.prev) queryClient.setQueryData(getListRemindersQueryKey(), context.prev);
       },
+      onSuccess: async (updated) => {
+        if (updated.done) {
+          await cancelReminderNotification(updated.id);
+        } else {
+          await scheduleReminderNotification(updated);
+        }
+      },
       onSettled: () => {
         queryClient.invalidateQueries({ queryKey: getListRemindersQueryKey() });
       },
@@ -592,6 +660,45 @@ export default function RemindersScreen() {
 
   const handleToggle = (reminder: Reminder) => {
     updateReminder({ id: reminder.id, data: { done: !reminder.done } });
+  };
+
+  const handleEnableAlarms = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const ok = await ensureAlarmReady();
+    await refreshAlarmStatus();
+    if (!ok) {
+      Alert.alert(
+        'Notifications blocked',
+        'Open Settings → Notifications and allow alerts, sound, and vibration. On Android also allow Alarms & reminders.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => openNotificationSettings() },
+        ],
+      );
+    } else {
+      if (reminders) await syncReminderNotifications(reminders);
+      Alert.alert('Alarms ready', 'Reminders will ring and vibrate even when the app is closed.');
+    }
+  };
+
+  const handleTestAlarm = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    const ok = await scheduleTestAlarm(10);
+    if (ok) {
+      Alert.alert(
+        'Test alarm in 10 seconds',
+        'Lock your phone or leave the app. You should hear sound and feel vibration.',
+      );
+    } else {
+      Alert.alert(
+        'Could not schedule test',
+        'Allow notifications first, then try again.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Enable alarms', onPress: handleEnableAlarms },
+        ],
+      );
+    }
   };
 
   const sorted = React.useMemo(() => {
@@ -617,20 +724,39 @@ export default function RemindersScreen() {
           <Feather name="bell" size={18} color={accent.amber} />
           <Text style={[styles.headerTitle, { color: colors.foreground }]}>Reminders</Text>
         </View>
-        {!isLoading && pendingCount > 0 && (
-          <View style={styles.headerMeta}>
-            {overdueCount > 0 && (
-              <View style={[styles.overdueBadge, { backgroundColor: accent.rose + '22' }]}>
-                <Text style={[styles.overdueText, { color: accent.rose }]}>
-                  {overdueCount} overdue
-                </Text>
-              </View>
-            )}
-            <Text style={[styles.headerCount, { color: colors.mutedForeground }]}>
-              {pendingCount}
-            </Text>
-          </View>
-        )}
+        <View style={styles.headerMeta}>
+          {alarmStatus === 'granted' ? (
+            <TouchableOpacity
+              onPress={handleTestAlarm}
+              style={[styles.alarmReadyBadge, { backgroundColor: accent.emerald + '22' }]}
+            >
+              <Feather name="volume-2" size={12} color={accent.emerald} />
+              <Text style={[styles.alarmReadyText, { color: accent.emerald }]}>Alarms on · Test</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity
+              onPress={handleEnableAlarms}
+              style={[styles.alarmReadyBadge, { backgroundColor: accent.amber + '22' }]}
+            >
+              <Feather name="bell-off" size={12} color={accent.amber} />
+              <Text style={[styles.alarmReadyText, { color: accent.amber }]}>Enable alarms</Text>
+            </TouchableOpacity>
+          )}
+          {!isLoading && pendingCount > 0 && (
+            <>
+              {overdueCount > 0 && (
+                <View style={[styles.overdueBadge, { backgroundColor: accent.rose + '22' }]}>
+                  <Text style={[styles.overdueText, { color: accent.rose }]}>
+                    {overdueCount} overdue
+                  </Text>
+                </View>
+              )}
+              <Text style={[styles.headerCount, { color: colors.mutedForeground }]}>
+                {pendingCount}
+              </Text>
+            </>
+          )}
+        </View>
       </View>
 
       {isLoading ? (
@@ -705,6 +831,15 @@ const styles = StyleSheet.create({
   headerCount: { fontSize: 14, fontWeight: '500' },
   overdueBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   overdueText: { fontSize: 11, fontWeight: '600' },
+  alarmReadyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  alarmReadyText: { fontSize: 11, fontWeight: '600' },
 
   listContent: { padding: 12, gap: 8 },
 
